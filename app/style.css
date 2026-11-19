@@ -63,6 +63,7 @@ button.sw-sunset.on { background: linear-gradient(90deg, #ff7b00, #ff2e63); }
 button.sw-neon.on { background: linear-gradient(90deg, #00b3c8, #ff00a8); }
 button.sw-gold.on { background: linear-gradient(90deg, #e8a100, #7a5200); color: #fff; }
 button.sw-noir.on { background: #e8e8e8; color: #0a0a0a; border-color: #e8e8e8; }
+button.sw-ink.on { background: linear-gradient(90deg, #2a1e5e, #e2703a); color: #fdf3d0; border-color: #e2703a; }
 
 .file { cursor: pointer; }
 input[type=file] { font: inherit; font-weight: 400; }

@@ -1,10 +1,12 @@
 // VICE COVER poster renderer: draws a multi-panel GTA-style poster onto any
 // 2D canvas. Pure drawing code — no network, no DOM input, no Rockstar assets.
 // A poster is: photo panels graded through a per-grade gradient-map LUT with
-// light tonal posterizing (cel feel), firm gutters, a slit sun sitting on the
-// sea panel's horizon, code-drawn palms, a print finishing pass (grain +
-// vignette), then layered lettering: a sunset-gradient title with a double
-// outline and a neon script tagline.
+// tonal posterizing (cel feel; the Poster Ink grade goes further — a firm
+// screen-print posterize plus a luminance-masked halftone that lives in the
+// highlights only), firm gutters, a slit sun sitting on the sea panel's
+// horizon, code-drawn palms, a print finishing pass (grain + vignette), then
+// layered lettering: a sunset-gradient title with a double outline and a
+// neon script tagline.
 
 export const SIZES = {
   '1080x1080': [1080, 1080],
@@ -17,6 +19,7 @@ export const LAYOUTS = {
   duo: { panels: 2, slant: 0.055, label: 'Split Duo' },
   solo: { panels: 1, slant: 0, label: 'Solo Hero' },
   grid: { panels: 5, slant: 0, label: 'Cover Grid' },
+  mosaic: { panels: 9, slant: 0, label: 'Mosaic' },
 };
 
 // Each grade carries a gradient-map ramp (shadow -> midtone -> highlight)
@@ -76,12 +79,33 @@ export const GRADES = {
     tagText: '#0a0a0a',
     scrim: '0, 0, 0',
   },
+  ink: {
+    // Poster Ink: a screen-print finish. A bold duotone ink ramp (deep
+    // indigo ink shadows -> warm terracotta midtones -> paper-cream
+    // highlights), a firmer posterize than the other grades, and a halftone
+    // dot screen masked to the highlights (see applyHalftone).
+    label: 'Poster Ink',
+    sky: ['#171233', '#3d2a6e'],
+    skyTop: '#0d0a24',
+    sun: '#f7e3ac',
+    sunCore: '#fdf3d0',
+    sunStops: ['#fdf3d0', '#f5b95e', '#e2703a'],
+    ramp: [[0, [20, 16, 54]], [0.22, [52, 38, 104]], [0.45, [196, 102, 84]], [0.72, [242, 170, 96]], [1, [250, 236, 204]]],
+    mix: 0.88,
+    steps: 4,
+    halftone: true,
+    accent: '#f5b95e',
+    tagText: '#0d0a24',
+    scrim: '10, 7, 30',
+  },
 };
 
 /** Panel polygons for a layout. Trio/Duo are slanted quads leaning right as
- *  they fall; Grid is one hero panel plus four satellites around it. */
+ *  they fall; Grid is one hero panel plus four satellites around it; Mosaic
+ *  is a 3x3 grid of nine equal cells (the GTA V cover pattern). */
 export function panelShapes(w, h, layout) {
   if (layout === 'grid') return { shapes: gridShapes(w, h), slant: 0, count: 5 };
+  if (layout === 'mosaic') return { shapes: mosaicShapes(w, h), slant: 0, count: 9 };
   const spec = LAYOUTS[layout] ?? LAYOUTS.trio;
   const n = spec.panels;
   const slant = w * spec.slant;
@@ -130,6 +154,25 @@ function gridShapes(w, h) {
     rect(2 * cw, mh, cw, h - mh), rect(3 * cw, mh, cw, h - mh)];
 }
 
+/** Mosaic: nine equal cells in a 3x3 grid, whatever the canvas aspect —
+ *  each cell simply takes the canvas's own proportions divided by three. */
+function mosaicShapes(w, h) {
+  const cw = w / 3;
+  const ch = h / 3;
+  const shapes = [];
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const x = col * cw;
+      const y = row * ch;
+      shapes.push({
+        x, y, w: cw, h: ch,
+        poly: [[x, y], [x + cw, y], [x + cw, y + ch], [x, y + ch]],
+      });
+    }
+  }
+  return shapes;
+}
+
 function tracePoly(ctx, poly) {
   ctx.beginPath();
   ctx.moveTo(poly[0][0], poly[0][1]);
@@ -144,8 +187,27 @@ export function panelPhoto(state, i) {
   const list = state.panels ?? [];
   if (!list.length) return null;
   const p = list[i % list.length];
-  if (!p || i < list.length) return p;
+  if (!p) return null;
+  if (state.layout === 'mosaic' && i === 3 && i < list.length) {
+    // Panel 4's shared re-crop (zoom 1.35, oy 0.4) is framed for the Grid's
+    // narrower satellites; in a wide Mosaic cell the width-driven cover-fit
+    // pushes the subject's eyes out of the top. Reframe it for Mosaic only.
+    return { img: p.img, zoom: 1.15, ox: p.ox ?? 0.3, oy: 0.72 };
+  }
+  if (i < list.length) return p;
   const k = Math.floor(i / list.length);
+  if (state.layout === 'mosaic') {
+    // Mosaic's rotated cells are short in landscape, where the standard
+    // re-crop (oy 0.38 at a hard zoom) pushes faces out of the top of the
+    // cell. Keep the variation, but zoom gentler and favour the top of the
+    // photo more, so heads stay inside the cell in every aspect.
+    return {
+      img: p.img,
+      zoom: Math.min(3, (p.zoom ?? 1) * (1.1 + 0.07 * k)),
+      ox: Math.max(-1, Math.min(1, -(p.ox ?? 0) + (k % 2 ? 0.3 : -0.3))),
+      oy: 0.62,
+    };
+  }
   return {
     img: p.img,
     zoom: Math.min(3, (p.zoom ?? 1) * (1.18 + 0.12 * k)),
@@ -182,10 +244,10 @@ function smoothstep(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-function posterT(t) {
-  const s = t * (TONAL_STEPS - 1);
-  const i = Math.min(TONAL_STEPS - 2, Math.floor(s));
-  return (i + smoothstep(0.32, 0.68, s - i)) / (TONAL_STEPS - 1);
+function posterT(t, steps = TONAL_STEPS) {
+  const s = t * (steps - 1);
+  const i = Math.min(steps - 2, Math.floor(s));
+  return (i + smoothstep(0.32, 0.68, s - i)) / (steps - 1);
 }
 
 function rampAt(stops, t) {
@@ -200,19 +262,52 @@ function rampAt(stops, t) {
   return stops[stops.length - 1][1];
 }
 
-/** 256-entry luminance -> RGB table for a grade, posterized to six steps. */
+/** 256-entry luminance -> RGB table for a grade, posterized to the grade's
+ *  tonal steps (six for the soft cel grades, four for Poster Ink's firmer
+ *  screen-print plateaus). */
 export function gradeLUT(gradeKey) {
   if (lutCache.has(gradeKey)) return lutCache.get(gradeKey);
   const grade = GRADES[gradeKey] ?? GRADES.sunset;
   const lut = new Uint8Array(256 * 3);
   for (let v = 0; v < 256; v++) {
-    const [r, g, b] = rampAt(grade.ramp, posterT(v / 255));
+    const [r, g, b] = rampAt(grade.ramp, posterT(v / 255, grade.steps ?? TONAL_STEPS));
     lut[v * 3] = r;
     lut[v * 3 + 1] = g;
     lut[v * 3 + 2] = b;
   }
   lutCache.set(gradeKey, lut);
   return lut;
+}
+
+/** Poster Ink's halftone screen: dots of the grade's deep ink colour on a
+ *  coarse brick-offset grid, sized by the graded pixel luminance — but the
+ *  mask only opens in the highlights (sky, paper-bright areas) and closes
+ *  completely through the midtones and shadows, so faces stay clean and the
+ *  texture reads as print in the background only. Luminance is sampled from
+ *  the already-posterized panel, so the dots follow the print plateaus. */
+function applyHalftone(ctx, cw, ch, data, grade) {
+  const pitch = Math.max(6, Math.min(15, Math.round(Math.min(cw, ch) / 60)));
+  const [ir, ig, ib] = grade.ramp[0][1];
+  ctx.save();
+  ctx.fillStyle = `rgba(${ir}, ${ig}, ${ib}, 0.72)`;
+  ctx.beginPath();
+  let row = 0;
+  for (let y = pitch / 2; y < ch; y += pitch, row++) {
+    const off = row % 2 ? pitch / 2 : 0;
+    for (let x = pitch / 2 + off; x < cw; x += pitch) {
+      const px = Math.min(cw - 1, Math.round(x));
+      const py = Math.min(ch - 1, Math.round(y));
+      const o = (py * cw + px) * 4;
+      const lum = (data[o] * 77 + data[o + 1] * 150 + data[o + 2] * 29) >> 8;
+      const s = smoothstep(0.67, 0.96, lum / 255);
+      if (s <= 0.02) continue;
+      const r = s * pitch * 0.48;
+      ctx.moveTo(x + r, y);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+    }
+  }
+  ctx.fill();
+  ctx.restore();
 }
 
 let imgSeq = 0;
@@ -239,6 +334,7 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
 
   const grade = GRADES[gradeKey] ?? GRADES.sunset;
   const mix = grade.mix;
+  let graded = null;
   if (mix > 0) {
     const lut = gradeLUT(gradeKey);
     const data = ctx.getImageData(0, 0, cw, ch);
@@ -254,7 +350,9 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
       px[i + 2] = b + (lut[o + 2] - b) * mix;
     }
     ctx.putImageData(data, 0, 0);
+    graded = px;
   }
+  if (grade.halftone && graded) applyHalftone(ctx, cw, ch, graded, grade);
 
   if (panelCache.size > 48) panelCache.delete(panelCache.keys().next().value);
   panelCache.set(key, canvas);
@@ -592,15 +690,19 @@ export function drawPoster(canvas, state) {
   // the lower corners. The sun and its glow are clipped to the sea panel's
   // own polygon, so neither can ever wash over a gutter into the next cell
   // (in the Grid's narrow satellites the disc is also sized and anchored
-  // to keep a clear margin from the cell edges).
-  const spot = sunAnchor(state, shapes, w, h);
-  const sunPanel = state.layout === 'solo' ? shapes[0] : (shapes[1] ?? shapes[0]);
-  ctx.save();
-  if (sunPanel) { tracePoly(ctx, sunPanel.poly); ctx.clip(); }
-  drawSunGlow(ctx, spot.cx, spot.cy, spot.r, grade);
-  drawSun(ctx, spot.cx, spot.cy, spot.r, grade);
-  ctx.restore();
-  strokeGutters();
+  // to keep a clear margin from the cell edges). Mosaic gets no sun: with
+  // nine small cells there is no sea cell that can be guaranteed face-free,
+  // and the brief for the layout is the grid itself, not the sun.
+  if (state.layout !== 'mosaic') {
+    const spot = sunAnchor(state, shapes, w, h);
+    const sunPanel = state.layout === 'solo' ? shapes[0] : (shapes[1] ?? shapes[0]);
+    ctx.save();
+    if (sunPanel) { tracePoly(ctx, sunPanel.poly); ctx.clip(); }
+    drawSunGlow(ctx, spot.cx, spot.cy, spot.r, grade);
+    drawSun(ctx, spot.cx, spot.cy, spot.r, grade);
+    ctx.restore();
+    strokeGutters();
+  }
   const palmColor = 'rgba(10, 4, 18, 0.88)';
   drawPalm(ctx, w * 0.02, h * 0.99, h * 0.3, false, palmColor);
   drawPalm(ctx, w * 0.99, h * 1.0, h * 0.25, true, palmColor);
