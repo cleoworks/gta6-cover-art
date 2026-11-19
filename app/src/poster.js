@@ -139,6 +139,35 @@ export const GRADES = {
     // skin moves; saturated props (the red dress, the convertible)
     // fall outside the saturation band.
     magentaTame: { angle: 0.85, target: 18 },
+    // Round 14 (`fringeTame`): the magenta tame above cleared the
+    // 280–350 sector, but the round-13 micro judge still failed the
+    // pier fisherman's beard: measured on the export, a large share
+    // of beard pixels sit in the near-red fringe (hue 350–360 and
+    // 0–10) at saturation ~0.41 and value ~0.66 — the exact notch the
+    // magenta tame fades out of to protect the marina subject's
+    // near-red cheek. The source explains it: his beard is grey-white
+    // (source saturation 0.12–0.19, blue level with green), so the
+    // skin detector barely sees it, the ramp mix paints it with the
+    // sunset's red channel lead, and the saturation lift amplifies
+    // that lead six-fold; what the eye reads is not skin but pink-
+    // coral fringe on grey hair. The fringe tame therefore works on
+    // the FINAL pixel in that notch: red-led pixels whose blue sits
+    // level with their green (the pink signature — true sunset
+    // orange always carries green well above blue) are rotated the
+    // short way toward the same warm anchor AND desaturated toward
+    // the grey they started as; hue rotation alone (the magenta
+    // tame's tool) cannot fix this class, because at preserved
+    // saturation the rotated pixel still reads coral. The marina
+    // subject's shaded cheek carries the same fringe hue at nearly
+    // the same saturation and value, and per-pixel tests cannot
+    // separate the two (round-14 sweeps: value floors and source
+    // skin weights each either spared her cheek or spared his
+    // speckle). What separates them is texture: his pink only exists
+    // interleaved with the grey hair itself, hers is a smooth field.
+    // The tame therefore also requires the pixel to fringe on
+    // near-neutral source neighbours (see fringeGateMap) — pink at
+    // the edge of grey is stubble; pink in a smooth field is a face.
+    fringeTame: { target: 16, angle: 0.75, satKeep: 0.6 },
     harmonize: true,
     glowSun: true,
     titleStops: [[0, '#fff7dc'], [0.34, '#ffd166'], [0.68, '#ff944c'], [1, '#ff6a2a']],
@@ -576,6 +605,45 @@ function halftoneGateMap(px, cw, ch) {
   return gate;
 }
 
+/** The fringe tame's neighbourhood gate (Blockbuster's `fringeTame`,
+ *  round 14): for each pixel, the share of near-neutral source pixels
+ *  (saturation below 0.22) among twelve taps around it, at the same
+ *  radius family as the halftone gate. The tame exists for pink the
+ *  grade paints onto grey facial hair, and grey hair is exactly a
+ *  field of near-neutral pixels interleaved with skin: a fringe-hued
+ *  pixel surrounded by neutrals is stubble territory, while the same
+ *  hue in a smooth field — the marina subject's shaded cheek, whose
+ *  neighbourhood is uniformly skin-toned — is a face, and the tame
+ *  stands down there no matter how closely the hues match. Measured
+ *  on the photo as drawn, before grading, like the halftone gate. */
+function fringeGateMap(px, cw, ch) {
+  const sat = new Float32Array(cw * ch);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    const mx = Math.max(r, g, b);
+    sat[j] = mx > 0 ? (mx - Math.min(r, g, b)) / mx : 0;
+  }
+  const s = Math.max(2, Math.min(4, Math.round(Math.min(cw, ch) / 143)));
+  const taps = [[-s, 0], [s, 0], [0, -s], [0, s], [-s, -s], [s, -s], [-s, s], [s, s],
+    [-2 * s, 0], [2 * s, 0], [0, -2 * s], [0, 2 * s]];
+  const gate = new Float32Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    const yw = y * cw;
+    for (let x = 0; x < cw; x++) {
+      let neutral = 0;
+      for (let t = 0; t < taps.length; t++) {
+        const tx = Math.max(0, Math.min(cw - 1, x + taps[t][0]));
+        const ty = Math.max(0, Math.min(ch - 1, y + taps[t][1]));
+        if (sat[ty * cw + tx] < 0.22) neutral++;
+      }
+      gate[yw + x] = neutral / taps.length;
+    }
+  }
+  return gate;
+}
+
 /** Poster Ink's halftone screen: dots of the grade's deep ink colour on a
  *  coarse brick-offset grid, sized by the graded pixel luminance — but the
  *  mask only opens in the highlights (sky, paper-bright areas) and closes
@@ -816,7 +884,7 @@ function painterlyInkCanvas(px, cw, ch, expo, p) {
 /** A panel's photo, drawn cover-fit into its own canvas and run through the
  *  grade's gradient map. Cached per (photo, grade, panel size, framing) so
  *  repeat renders and exports stay fast. */
-export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
+export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure = false) {
   const cw = Math.max(1, Math.round(shape.w));
   const ch = Math.max(1, Math.round(shape.h));
   const img = photo.img;
@@ -824,7 +892,8 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
   const key = [img.__vcId, gradeKey, cw, ch,
     (photo.zoom ?? 1).toFixed(3), (photo.ox ?? 0).toFixed(3), (photo.oy ?? 0.55).toFixed(3),
     photo.flip ? 'f' : '',
-    wb ? wb.map((v) => v.toFixed(3)).join(',') : ''].join('|');
+    wb ? wb.map((v) => v.toFixed(3)).join(',') : '',
+    meanMeasure ? 'mean' : ''].join('|');
   if (panelCache.has(key)) return panelCache.get(key);
 
   const canvas = document.createElement('canvas');
@@ -854,6 +923,7 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
   const expo = photoExposure(img);
   let graded = null;
   let gate = null;
+  let fringeGate = null;
   let inkCanvas = null;
   if (mix > 0) {
     const lut = gradeLUT(gradeKey);
@@ -870,6 +940,9 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
     // The halftone's gate map is measured on the photo as drawn, before
     // grading (and before the exposure lift) changes its detail.
     gate = grade.halftone ? halftoneGateMap(px, cw, ch) : null;
+    // The fringe tame's gate map likewise: the share of near-neutral
+    // source pixels around each pixel — see fringeGateMap.
+    fringeGate = grade.fringeTame ? fringeGateMap(px, cw, ch) : null;
     // Key Art's ink contours are measured on the softened base as drawn
     // (before the grading loop rewrites these pixels), at quarter
     // resolution — see painterlyInkCanvas.
@@ -943,6 +1016,19 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
     // value untouched. See the grade's own note for the measurements
     // behind it. Grades without the flag skip the branch entirely.
     const magTame = grade.magentaTame ?? null;
+    // Fringe taming (grades that carry `fringeTame`: Blockbuster,
+    // round 14). Judged on the FINAL pixel, after the magenta tame:
+    // the near-red notch that tame deliberately spares (350–360 and
+    // the first degrees past 0) is where grey facial hair lands after
+    // the ramp has painted it — see the grade's own note for the
+    // measurements. Grades without the flag skip the branch entirely.
+    // Mean-measure renders (the harmonize gains' inputs) skip it too:
+    // the tame is a local spot-fix, not part of a panel's white-
+    // balance identity, and round 14 measured it steering every
+    // satellite's gains — the marina subject's shaded cheek, itself
+    // far outside the tame's gates, moved +6.8 degrees of hue purely
+    // through the gain feedback.
+    const fringeTame = meanMeasure ? null : (grade.fringeTame ?? null);
     for (let y = 0; y < ch; y++) {
       const rowBase = y * cw;
       const bayerRow = BAYER8[y & 7];
@@ -1083,6 +1169,65 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
             }
           }
         }
+        if (fringeTame) {
+          // Cheap exact pre-filter: the fringe sector (hue 348–360
+          // and 0–13) is red-led by construction, so only red-led
+          // pixels can qualify.
+          const mx = Math.max(nr, ng, nb);
+          if (mx === nr && mx > 0) {
+            const mn = Math.min(ng, nb);
+            const d = mx - mn;
+            if (d > 0) {
+              const sat = d / mx;
+              let hue = 60 * (((ng - nb) / d) % 6);
+              if (hue < 0) hue += 360;
+              let hw = 0;
+              if (hue >= 346) hw = smoothstep(346, 350, hue);
+              else if (hue <= 13) hw = 1 - smoothstep(9, 13, hue);
+              if (hw > 0) {
+                // The full weight: the fringe hue sector, a moderate
+                // saturation band, sunlit values, blue level with
+                // green (the pink relation — sunset-orange surfaces
+                // carry green well above blue and fail it, so the sky
+                // keeps its grade), and the neighbourhood gate: the
+                // pixel must fringe on near-neutral source pixels
+                // (the grey hair itself — see fringeGateMap). That
+                // gate is the marina subject's protection: her shaded
+                // cheek matches the beard's fringe in hue, saturation
+                // and value, per-pixel test by per-pixel test
+                // (round-14 sweeps: value floors and source-skin
+                // weights each either spared her or spared the
+                // speckle), but her cheek is a smooth field with no
+                // neutral neighbours, while the beard's pink only
+                // exists interleaved with grey hair.
+                const fw = hw
+                  * smoothstep(0.24, 0.32, sat) * (1 - smoothstep(0.58, 0.68, sat))
+                  * smoothstep(0.46, 0.56, mx / 255)
+                  * (1 - smoothstep(0.07, 0.13, (ng - nb) / mx))
+                  * smoothstep(0.12, 0.3, fringeGate[rowBase + x]);
+                if (fw > 0) {
+                  const arc = hue >= 346
+                    ? (360 - hue) + fringeTame.target
+                    : fringeTame.target - hue;
+                  let nh = hue + arc * fringeTame.angle * fw;
+                  if (nh >= 360) nh -= 360;
+                  // Rebuild at the new hue with the same max and a
+                  // reduced chroma: value preserved, saturation
+                  // scaled toward the grey the pixel started as.
+                  const nd = d * (1 - (1 - fringeTame.satKeep) * fw);
+                  const nmn = mx - nd;
+                  const x = nd * (1 - Math.abs(((nh / 60) % 2) - 1));
+                  if (nh < 60) { nr = mx; ng = nmn + x; nb = nmn; }
+                  else if (nh < 120) { nr = nmn + x; ng = mx; nb = nmn; }
+                  else if (nh < 180) { nr = nmn; ng = mx; nb = nmn + x; }
+                  else if (nh < 240) { nr = nmn; ng = nmn + x; nb = mx; }
+                  else if (nh < 300) { nr = nmn + x; ng = nmn; nb = mx; }
+                  else { nr = mx; ng = nmn; nb = nmn + x; }
+                }
+              }
+            }
+          }
+        }
         px[i] = nr;
         px[i + 1] = ng;
         px[i + 2] = nb;
@@ -1148,16 +1293,20 @@ function canvasMeanRGB(canvas) {
  *  with the gains clamped so no panel is ever dragged across the
  *  colour wheel. The hero's own gains are exactly 1. Measured on the
  *  un-shifted graded panels (which stay in the panel cache; the
- *  shifted renders cache alongside them under their own keys). */
+ *  shifted renders cache alongside them under their own keys), and
+ *  without the fringe tame: that pass is a local spot-fix on final
+ *  pixels, and letting it into the means lets it steer every panel's
+ *  gains (round 14: the marina subject's cheek moved +6.8 degrees of
+ *  hue through the feedback alone). */
 function harmonizeGains(state, shapes) {
   const rendered = shapes.map((s, i) => {
     const photo = panelPhoto(state, i);
-    return photo && photo.img ? gradedPanelCanvas(s, photo, state.grade) : null;
+    return photo && photo.img ? gradedPanelCanvas(s, photo, state.grade, null, true) : null;
   });
   const heroIdx = Math.max(0, shapes.findIndex((s) => s.main));
   const target = rendered[heroIdx] ? canvasMeanRGB(rendered[heroIdx]) : null;
   if (!target) return null;
-  return rendered.map((c, i) => {
+  const gains = rendered.map((c, i) => {
     if (!c || i === heroIdx) return null;
     const own = canvasMeanRGB(c);
     return [0, 1, 2].map((k) => {
@@ -1166,6 +1315,7 @@ function harmonizeGains(state, shapes) {
       return Math.max(0.85, Math.min(1.18, g));
     });
   });
+  return gains;
 }
 
 // --- Sun ------------------------------------------------------------------
