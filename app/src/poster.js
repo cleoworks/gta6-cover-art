@@ -2,13 +2,16 @@
 // 2D canvas. Pure drawing code — no network, no DOM input, no Rockstar assets.
 // A poster is: photo panels graded through a per-grade gradient-map LUT with
 // tonal posterizing (cel feel; the Poster Ink grade goes further — a firm
-// screen-print posterize plus a luminance-masked halftone that lives in the
-// highlights only; Noir and Poster Ink protect their shadows, cross-fading
-// the posterized ramp to a smooth one at low luminance so shaded faces
-// keep their features), firm gutters, a slit sun sitting on the sea panel's
-// horizon, code-drawn palms, a print finishing pass (grain + vignette), then
-// layered lettering: a sunset-gradient title with a double outline and a
-// neon script tagline.
+// screen-print posterize plus a halftone that lives in smooth highlights
+// only and fades over detailed texture; Noir and Poster Ink protect their
+// shadows, cross-fading the posterized ramp to a smooth one at low
+// luminance so shaded faces keep their features), firm gutters, a slit sun
+// sitting on the sea panel's horizon, code-drawn palms, a print finishing
+// pass (grain + vignette), then layered lettering: a sunset-gradient title
+// with a double outline and a neon script tagline. Dark photos are steadied
+// first by a gated auto-exposure lift (bright photos pass through
+// untouched), and a photo shown twice in one layout is mirrored on its
+// later showings so the repeat reads as a different moment.
 
 export const SIZES = {
   '1080x1080': [1080, 1080],
@@ -74,6 +77,11 @@ export const GRADES = {
     sun: '#e8e8e8',
     sunCore: '#ffffff',
     sunStops: ['#ffffff', '#c9c9c9', '#6e6e6e'],
+    // The Noir disc gets a richer four-stop vertical shade (bright crown ->
+    // mid-grey belly -> deep-grey base) and soft-edged dark-grey slits, so
+    // it reads as a shaded sun, not a white sticker with black bars.
+    sunGrad: [[0, '#ffffff'], [0.32, '#e4e4e4'], [0.62, '#a6a6a6'], [1, '#595959']],
+    sunSlitSoft: true,
     sunRim: 'rgba(235, 235, 235, 0.9)',
     // The ramp's floor is lifted and its shadow stops are widened, and the
     // grade carries shadow protection (see `protect` in gradedPanelCanvas):
@@ -196,19 +204,28 @@ function tracePoly(ctx, poly) {
 
 /** The photo assignment for panel i: panels beyond the loaded list rotate
  *  through the loaded photos with a tighter, shifted crop — the GTA cover
- *  pattern of reusing one shoot across several panels. */
+ *  pattern of reusing one shoot across several panels. A photo's second and
+ *  later showings in the same layout are also mirrored (`flip`), so a
+ *  repeat reads as a different moment of the shoot instead of a copy-paste;
+ *  the first showing is never touched. */
 export function panelPhoto(state, i) {
   const list = state.panels ?? [];
   if (!list.length) return null;
   const p = list[i % list.length];
   if (!p) return null;
+  let seen = 0;
+  for (let j = 0; j < i; j++) {
+    const q = list[j % list.length];
+    if (q && q.img && q.img === p.img) seen++;
+  }
+  const flip = seen > 0;
   if (state.layout === 'mosaic' && i === 3 && i < list.length) {
     // Panel 4's shared re-crop (zoom 1.35, oy 0.4) is framed for the Grid's
     // narrower satellites; in a wide Mosaic cell the width-driven cover-fit
     // pushes the subject's eyes out of the top. Reframe it for Mosaic only.
-    return { img: p.img, zoom: 1.15, ox: p.ox ?? 0.3, oy: 0.72 };
+    return { img: p.img, zoom: 1.15, ox: p.ox ?? 0.3, oy: 0.72, flip };
   }
-  if (i < list.length) return p;
+  if (i < list.length) return flip ? { ...p, flip } : p;
   const k = Math.floor(i / list.length);
   if (state.layout === 'mosaic') {
     // Mosaic's rotated cells are short in landscape, where the standard
@@ -220,6 +237,7 @@ export function panelPhoto(state, i) {
       zoom: Math.min(3, (p.zoom ?? 1) * (1.1 + 0.07 * k)),
       ox: Math.max(-1, Math.min(1, -(p.ox ?? 0) + (k % 2 ? 0.3 : -0.3))),
       oy: 0.62,
+      flip,
     };
   }
   return {
@@ -227,6 +245,7 @@ export function panelPhoto(state, i) {
     zoom: Math.min(3, (p.zoom ?? 1) * (1.18 + 0.12 * k)),
     ox: Math.max(-1, Math.min(1, -(p.ox ?? 0) + (k % 2 ? 0.3 : -0.3))),
     oy: 0.38,
+    flip,
   };
 }
 
@@ -306,18 +325,79 @@ function dotHash(a, b) {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 }
 
+/** The halftone gate map, per pixel of the source photo as drawn (before
+ *  grading): 1 where the dot screen may live, 0 where it must not. Two
+ *  fades multiply:
+ *  - Texture: summed absolute luminance differences across a small span.
+ *    Flat areas — sky, sea, water glint — measure near zero even when
+ *    bright; fabric weave, hair and fine detail measure high, and the
+ *    screen fades over them.
+ *  - Neutral-bright: a bright, low-saturation surface (a white singlet,
+ *    a sunlit wall) is luminance's blind spot — it is as bright as sky
+ *    and nearly as smooth in its centre, but dots on it read as dirt on
+ *    clothing, not print texture. The screen is damped (not erased)
+ *    there; genuinely coloured bright areas (sunset sky, sea glint)
+ *    keep it in full. */
+function halftoneGateMap(px, cw, ch) {
+  const lum = new Float32Array(cw * ch);
+  const sat = new Float32Array(cw * ch);
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    lum[j] = (r * 77 + g * 150 + b * 29) >> 8;
+    const mx = Math.max(r, g, b);
+    sat[j] = mx > 0 ? (mx - Math.min(r, g, b)) / mx : 0;
+  }
+  const s = Math.max(2, Math.min(4, Math.round(Math.min(cw, ch) / 143)));
+  const gate = new Float32Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    const ym = Math.max(0, y - s) * cw;
+    const yp = Math.min(ch - 1, y + s) * cw;
+    const yw = y * cw;
+    for (let x = 0; x < cw; x++) {
+      const xm = Math.max(0, x - s);
+      const xp = Math.min(cw - 1, x + s);
+      const tex = Math.abs(lum[yw + xp] - lum[yw + xm]) + Math.abs(lum[yp + x] - lum[ym + x]);
+      const texGate = 1 - smoothstep(4.5, 12, tex);
+      const neutral = smoothstep(0.62, 0.82, lum[yw + x] / 255) * (1 - smoothstep(0.16, 0.3, sat[yw + x]));
+      gate[yw + x] = texGate * (1 - 0.55 * neutral);
+    }
+  }
+  return gate;
+}
+
 /** Poster Ink's halftone screen: dots of the grade's deep ink colour on a
  *  coarse brick-offset grid, sized by the graded pixel luminance — but the
  *  mask only opens in the highlights (sky, paper-bright areas) and closes
  *  completely through the midtones and shadows, so faces stay clean and the
  *  texture reads as print in the background only. Luminance is sampled from
  *  the already-posterized panel, so the dots follow the print plateaus.
- *  Each dot centre is jittered deterministically by up to ±22% of the
- *  pitch: an un-jittered grid draws a visibly mechanical dotted line
+ *  A second gate reads the photo itself (see halftoneGateMap): where the
+ *  source is detailed — fabric weave, hair, foliage — or bright but
+ *  neutral (white clothing), the dots fade out even in bright areas,
+ *  while smooth, coloured bright areas (sky, sea, glint) keep the full
+ *  screen. Each dot centre is jittered deterministically by up to ±22% of
+ *  the pitch: an un-jittered grid draws a visibly mechanical dotted line
  *  wherever a bright band (sea glint) crosses the screen. */
-function applyHalftone(ctx, cw, ch, data, grade) {
+function applyHalftone(ctx, cw, ch, data, grade, gate) {
   const pitch = Math.max(6, Math.min(15, Math.round(Math.min(cw, ch) / 60)));
   const [ir, ig, ib] = grade.ramp[0][1];
+  // Average the gate over the dot's own cell (centre + four points a
+  // third of a pitch out), so the gate answers for the area the dot
+  // would cover, not a single pixel.
+  const gateAt = (x, y) => {
+    if (!gate) return 1;
+    const d = pitch / 3;
+    let sum = 0;
+    const pts = [[x, y], [x - d, y], [x + d, y], [x, y - d], [x, y + d]];
+    for (const [qx, qy] of pts) {
+      const px = Math.max(0, Math.min(cw - 1, Math.round(qx)));
+      const py = Math.max(0, Math.min(ch - 1, Math.round(qy)));
+      sum += gate[py * cw + px];
+    }
+    return sum / pts.length;
+  };
   ctx.save();
   ctx.fillStyle = `rgba(${ir}, ${ig}, ${ib}, 0.6)`;
   ctx.beginPath();
@@ -332,7 +412,8 @@ function applyHalftone(ctx, cw, ch, data, grade) {
       const py = Math.max(0, Math.min(ch - 1, Math.round(y)));
       const o = (py * cw + px) * 4;
       const lum = (data[o] * 77 + data[o + 1] * 150 + data[o + 2] * 29) >> 8;
-      const s = smoothstep(0.67, 0.96, lum / 255);
+      let s = smoothstep(0.67, 0.96, lum / 255);
+      if (s > 0.02) s *= gateAt(x, y);
       if (s <= 0.02) continue;
       const r = s * pitch * 0.42;
       ctx.moveTo(x + r, y);
@@ -346,6 +427,48 @@ function applyHalftone(ctx, cw, ch, data, grade) {
 let imgSeq = 0;
 const panelCache = new Map(); // graded panel canvases, keyed by photo+grade+framing
 
+// --- Auto-exposure for dark photos ----------------------------------------
+
+// Mean-luminance gate: a photo at or above it is considered well exposed
+// and passes through the grader byte-for-byte untouched; below it, the
+// photo is lifted before grading by a gentle gamma whose strength grows
+// with how far under the gate the photo sits. Gamma lifts shadows and
+// midtones while pinning the highlights, so a night photo becomes
+// readable without blowing out its lights or losing the night mood.
+// Measured on the bundled samples: the three bright scenes sit at
+// 0.43–0.57 mean luminance, the night portrait at 0.23 — the gate at 0.33
+// separates them cleanly.
+const EXPO_GATE = 0.33;
+
+function photoExposure(img) {
+  if (img.__vcExpo) return img.__vcExpo;
+  let expo = { lut: null };
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = 64;
+    cv.height = 64;
+    const x = cv.getContext('2d');
+    x.drawImage(img, 0, 0, 64, 64);
+    const d = x.getImageData(0, 0, 64, 64).data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      sum += (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+    }
+    const mean = sum / (d.length / 4) / 255;
+    if (mean < EXPO_GATE) {
+      const strength = (EXPO_GATE - mean) / EXPO_GATE;
+      const gamma = 1 - 0.55 * strength;
+      const lut = new Uint8Array(256);
+      for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * Math.pow(v / 255, gamma));
+      expo = { lut };
+    }
+  } catch {
+    // Exposure is best-effort: grading proceeds without it.
+  }
+  img.__vcExpo = expo;
+  return expo;
+}
+
 /** A panel's photo, drawn cover-fit into its own canvas and run through the
  *  grade's gradient map. Cached per (photo, grade, panel size, framing) so
  *  repeat renders and exports stay fast. */
@@ -355,7 +478,8 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
   const img = photo.img;
   if (img.__vcId == null) img.__vcId = ++imgSeq;
   const key = [img.__vcId, gradeKey, cw, ch,
-    (photo.zoom ?? 1).toFixed(3), (photo.ox ?? 0).toFixed(3), (photo.oy ?? 0.55).toFixed(3)].join('|');
+    (photo.zoom ?? 1).toFixed(3), (photo.ox ?? 0).toFixed(3), (photo.oy ?? 0.55).toFixed(3),
+    photo.flip ? 'f' : ''].join('|');
   if (panelCache.has(key)) return panelCache.get(key);
 
   const canvas = document.createElement('canvas');
@@ -363,11 +487,23 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
   canvas.height = ch;
   const ctx = canvas.getContext('2d');
   const f = photoFrame({ x: 0, y: 0, w: cw, h: ch }, photo);
+  if (photo.flip) {
+    // Mirrored repeat showing: same cover-fit frame, content flipped, so
+    // the panel reads as the reverse angle of the same moment.
+    ctx.save();
+    ctx.translate(cw, 0);
+    ctx.scale(-1, 1);
+  }
   ctx.drawImage(img, f.dx, f.dy, f.dw, f.dh);
+  if (photo.flip) ctx.restore();
 
   const grade = GRADES[gradeKey] ?? GRADES.sunset;
   const mix = grade.mix;
+  // Dark photos are exposure-lifted before grading (bright photos get a
+  // null LUT and the loop below is exactly the pre-lift behaviour).
+  const expo = photoExposure(img);
   let graded = null;
+  let gate = null;
   if (mix > 0) {
     const lut = gradeLUT(gradeKey);
     // Shadow protection (grades that carry `protect`: Noir, Poster Ink).
@@ -380,10 +516,18 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     const smoothLut = protect ? gradeLUT(gradeKey, true) : null;
     const data = ctx.getImageData(0, 0, cw, ch);
     const px = data.data;
+    // The halftone's gate map is measured on the photo as drawn, before
+    // grading (and before the exposure lift) changes its detail.
+    gate = grade.halftone ? halftoneGateMap(px, cw, ch) : null;
     for (let i = 0; i < px.length; i += 4) {
-      const r = px[i];
-      const g = px[i + 1];
-      const b = px[i + 2];
+      let r = px[i];
+      let g = px[i + 1];
+      let b = px[i + 2];
+      if (expo.lut) {
+        r = expo.lut[r];
+        g = expo.lut[g];
+        b = expo.lut[b];
+      }
       const lum = (r * 77 + g * 150 + b * 29) >> 8;
       const o = lum * 3;
       let tr = lut[o];
@@ -402,7 +546,7 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     ctx.putImageData(data, 0, 0);
     graded = px;
   }
-  if (grade.halftone && graded) applyHalftone(ctx, cw, ch, graded, grade);
+  if (grade.halftone && graded) applyHalftone(ctx, cw, ch, graded, grade, gate);
 
   if (panelCache.size > 48) panelCache.delete(panelCache.keys().next().value);
   panelCache.set(key, canvas);
@@ -437,25 +581,41 @@ export function drawSunGlow(ctx, cx, cy, r, grade) {
   ctx.restore();
 }
 
-/** Classic slit sun: a disc with a vertical grade gradient (in Noir the
- *  stops run white -> mid grey -> deep grey so the disc keeps its shading,
- *  and a thin light rim lifts it off the sea texture behind it), cut by
- *  widening horizontal gaps toward the bottom. */
+/** Classic slit sun: a disc with a vertical grade gradient (a grade may
+ *  carry a richer `sunGrad` — Noir's runs white -> light grey -> mid grey
+ *  -> deep grey so the disc keeps real shading instead of reading as a
+ *  flat white sticker — and soft-edged dark-grey slits via `sunSlitSoft`,
+ *  instead of hard pure-black bars), cut by widening horizontal gaps
+ *  toward the bottom. */
 export function drawSun(ctx, cx, cy, r, grade) {
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
   const g = ctx.createLinearGradient(0, cy - r, 0, cy + r);
-  g.addColorStop(0, grade.sunStops[0]);
-  g.addColorStop(0.55, grade.sunStops[1]);
-  g.addColorStop(1, grade.sunStops[2]);
+  if (grade.sunGrad) {
+    for (const [p, c] of grade.sunGrad) g.addColorStop(p, c);
+  } else {
+    g.addColorStop(0, grade.sunStops[0]);
+    g.addColorStop(0.55, grade.sunStops[1]);
+    g.addColorStop(1, grade.sunStops[2]);
+  }
   ctx.fillStyle = g;
   ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-  ctx.fillStyle = grade.skyTop;
   let yy = cy + r * 0.05;
   let gap = r * 0.045;
   while (yy < cy + r) {
+    if (grade.sunSlitSoft) {
+      // Soft slit: dark grey (never pure black) with feathered top and
+      // bottom edges, so the bars read as shade printed into the disc.
+      const sg = ctx.createLinearGradient(0, yy, 0, yy + gap);
+      sg.addColorStop(0, 'rgba(38, 38, 38, 0.4)');
+      sg.addColorStop(0.5, 'rgba(38, 38, 38, 0.92)');
+      sg.addColorStop(1, 'rgba(38, 38, 38, 0.4)');
+      ctx.fillStyle = sg;
+    } else {
+      ctx.fillStyle = grade.skyTop;
+    }
     ctx.fillRect(cx - r, yy, r * 2, gap);
     yy += gap + r * 0.16;
     gap *= 1.55;
@@ -767,11 +927,11 @@ export function drawPoster(canvas, state) {
   applyFinishing(ctx, w, h);
 
   // Scrim so the lettering reads over any photo. Mosaic's nine cells are
-  // the layout's whole argument, so its scrim starts lower and its
-  // lettering block is scaled down — the bottom row of cells stays
-  // readable as panels instead of drowning under the title.
+  // the layout's whole argument, so its scrim starts lower still and its
+  // lettering block is scaled down further — all nine cells, bottom row
+  // included, stay readable as panels instead of drowning under the title.
   const mosaic = state.layout === 'mosaic';
-  const scrimTop = mosaic ? 0.64 : 0.52;
+  const scrimTop = mosaic ? 0.7 : 0.52;
   const scrim = ctx.createLinearGradient(0, h * scrimTop, 0, h);
   scrim.addColorStop(0, `rgba(${grade.scrim}, 0)`);
   scrim.addColorStop(1, `rgba(${grade.scrim}, 0.82)`);
@@ -780,7 +940,7 @@ export function drawPoster(canvas, state) {
 
   // Lettering: gradient title with a double outline, neon script tagline.
   const title = (state.title || '').trim().toUpperCase();
-  const titleBox = title ? drawTitle(ctx, w, h, title, noir, mosaic ? 0.8 : 1) : null;
+  const titleBox = title ? drawTitle(ctx, w, h, title, noir, mosaic ? 0.7 : 1) : null;
   const tag = (state.tagline || '').trim();
   if (tag) drawTagline(ctx, w, h, tag, noir, titleBox);
 
