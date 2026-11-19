@@ -172,6 +172,12 @@ export const GRADES = {
     glowSun: true,
     titleStops: [[0, '#fff7dc'], [0.34, '#ffd166'], [0.68, '#ff944c'], [1, '#ff6a2a']],
     titleRim: '#3d0a26',
+    // Round 16 (`titleDepth`): the winners' lettering is extruded —
+    // a hard stepped block of shade under the fill, not a soft
+    // shadow — so the title sits IN the art. drawTitle stacks six
+    // solid impressions of the glyphs down and to the right in this
+    // deep maroon-plum before the rim, outline and fill land.
+    titleDepth: '#33081d',
     accent: '#ff2e63',
     tagText: '#1c0b3d',
     scrim: '10, 4, 20',
@@ -2007,6 +2013,25 @@ function drawTitle(ctx, w, title, noir, size, baseline, opts = {}) {
   } else {
     for (const [p, c] of (opts.stops ?? TITLE_STOPS)) grad.addColorStop(p, c);
   }
+  if (!noir && opts.depth) {
+    // Extruded depth (grades that carry `titleDepth`: Blockbuster,
+    // round 16): six solid impressions of the glyphs stacked down
+    // and to the right in a deep maroon-plum, drawn before the rim
+    // so the lettering stands on a hard block of shade — the depth
+    // the winning covers' titles carry — instead of floating on a
+    // soft shadow. The stack is sized against the rim stroke that
+    // follows it: the rim's half-width runs near 0.10 of the font
+    // size, so a shallower stack would be swallowed whole by the
+    // rim and outline; at 0.16 deep the lowest strata clear them
+    // and read as steps under the letters. Fit, centre and
+    // baseline are the caller's and do not move; the steps only
+    // thicken the lettering's underside, toward the script that
+    // rides it.
+    ctx.fillStyle = opts.depth;
+    for (let i = 6; i >= 1; i--) {
+      ctx.fillText(title, cx + size * 0.012 * i, baseline + size * 0.027 * i);
+    }
+  }
   ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
   ctx.shadowBlur = size * 0.16;
   ctx.shadowOffsetY = size * 0.05;
@@ -2188,7 +2213,7 @@ export function drawPoster(canvas, state) {
     if (title) {
       const size = fitFont(ctx, title, w * 0.94, bandH * 0.46, 'Anton, "Arial Black", sans-serif');
       titleBox = drawTitle(ctx, w, title, noir, size, gridH + bandH * 0.55,
-        { stops: grade.titleStops, rim: grade.titleRim });
+        { stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth });
     }
   } else {
     // Scrim so the lettering reads over any photo. A dressed poster
@@ -2229,7 +2254,7 @@ export function drawPoster(canvas, state) {
         : fitFont(ctx, title, heroCx != null ? w * 0.64 : w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
       titleBox = drawTitle(ctx, w, title, noir, size,
         bandTitle ? h * 0.745 : (dressed ? h * 0.752 : h * 0.865),
-        { cx: bandTitle ? w * 0.36 : (heroCx ?? w / 2), stops: grade.titleStops, rim: grade.titleRim });
+        { cx: bandTitle ? w * 0.36 : (heroCx ?? w / 2), stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth });
       titleBox.band = bandTitle;
     }
   }

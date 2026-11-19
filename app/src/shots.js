@@ -56,20 +56,23 @@ export async function runShot(shot, query, helpers) {
     : undefined;
   // The Blockbuster Grid showcase's scene panels get their own
   // framings, for the same reason the hero does. The causeway photo
-  // is a wide sunset slice whose money is split between the sea on
-  // its left and the palm over the road on its right — the showcase
-  // pans toward the sea (ox 0.55), which keeps the palm-and-road
-  // slice in the strip of its round-13 cell (bottom-left, beside the
-  // title band) that stays visible. The neon street pans the other
-  // way (ox 0.35 toward its left signs): in its round-13 cell
-  // (top-right, the one cell the band never reaches) the whole panel
-  // shows, and the centred crop would slice the Steakhouse and
-  // Rancho signs at its left edge — the pan keeps the legible signs
-  // and the crowd under them inside the frame. Any other scene keeps
-  // the renderer's default framing exactly.
+  // (round 16: a lifeguard tower with the sun blazing through it)
+  // is a wide sunset shot whose tower stands right of centre, while
+  // its cell (bottom-left, beside the title band) only shows its
+  // right strip clear of the letters: the showcase zooms in and
+  // pans so that strip holds the tower's sunlit cabin and slats,
+  // rides to the bottom of the frame (oy -1) so the strip ends on
+  // the sand between the tower's legs, and the panel's chip — which
+  // the buried rule parks low in that same cell — lands on open
+  // sand between the legs, clear of the tower, the distant walkers
+  // and every palm. The neon street (round 16: a sports car under
+  // Ueno signage) is a portrait shot that fills its cell whole; its
+  // pan is a no-op kept for symmetry with the old crowd shot's
+  // framing. Any other scene keeps the renderer's default framing
+  // exactly.
   const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
   const coastFrame = (showcaseScene && third.endsWith('coast.jpg'))
-    ? { ox: 0.55 }
+    ? { zoom: 1.38, ox: -0.17, oy: -1 }
     : undefined;
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { ox: 0.35 }
