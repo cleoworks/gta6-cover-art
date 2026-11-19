@@ -363,24 +363,64 @@ function gridShapes(w, h) {
     poly: [[x, y], [x + pw, y], [x + pw, y + ph], [x, y + ph]],
   });
   if (w > h) {
-    // Landscape: hero on the left (~55% wide, full height), 2x2 satellites
-    // right. The satellite CELLS are listed in panel order — pier top-left,
-    // causeway bottom-left, neon top-right, marina bottom-right (round 13):
-    // the dressed lettering band strides across the hero and the LEFT
-    // satellite column only, so the top-right cell is the one satellite the
-    // band never reaches — that is where the neon street lives now, because
-    // a signage scene has to be read whole or it is dead weight behind the
-    // title. The causeway — pure scenery, a road and palms — takes the
-    // bottom-left cell in the band's path instead: scenery tolerates the
-    // letters the way the winning covers' backdrop panels do. Panel order
-    // itself (and with it the caption chips, the seal's panel and the sun's
-    // panel) is exactly what it was; only two cells traded places.
+    // Landscape (round 19): the hero plus a 2x2 satellite block, cut on
+    // the diagonal the way the winning covers cut theirs. Both vertical
+    // dividers lean right as they fall (the Trio family's lean, ~4
+    // degrees), and the satellite row divider RISES to the right at the
+    // same ~4 degrees the slanted title climbs (see drawPoster), so the
+    // five panels interlock as parallelograms that lean into the
+    // lettering instead of sitting in a rigid rectangular grid under a
+    // slab. The panels still tile the canvas exactly — every internal
+    // edge is shared by its two neighbours, no gaps, no overlaps — so
+    // the sky base never shows through a corner. Panel order is
+    // unchanged (hero, pier, causeway, neon, marina — the round-13
+    // assignment: the neon scene top-right where the band never
+    // reaches, the causeway bottom-left in the band's path), and each
+    // shape's x/y/w/h is its polygon's bounding box — the convention
+    // the Trio shapes already use — so photo framing, the caption
+    // chips and the sun anchor keep working off the box while the clip
+    // (and the gutter stroke) follows the polygon. The row divider
+    // also hands the bottom row the taller half of the block (it
+    // crosses the hero's edge at 0.515 of the height and the right
+    // edge at 0.46): the causeway reads as a full panel beside and
+    // below the title band now, not a strip behind it.
+    const lean = w * 0.038;
     const mw = w * 0.55;
     const cw = (w - mw) / 2;
-    const ch = h / 2;
-    return [rect(0, 0, mw, h, true),
-      rect(mw, 0, cw, ch), rect(mw, ch, cw, ch),
-      rect(mw + cw, 0, cw, ch), rect(mw + cw, ch, cw, ch)];
+    // The row divider is the straight line from A (on the hero's right
+    // edge, 0.515 down) to B (on the canvas' right edge, 0.46 down);
+    // its crossings with the two slanted dividers fix the satellites'
+    // shared corners.
+    const ax = mw + lean * 0.515;
+    const ay = h * 0.515;
+    const bx = w;
+    const by = h * 0.46;
+    const k = (by - ay) / (bx - ax);
+    // Where the vertical divider whose top sits at x0 crosses the row
+    // divider: x = x0 + lean*t, y = t*h lies on the row line.
+    const cross = (x0) => {
+      const t = (ay + k * (x0 - ax)) / (h - k * lean);
+      return [x0 + lean * t, t * h];
+    };
+    const aPt = cross(mw);
+    const pPt = cross(mw + cw);
+    const shape = (poly, main, chipLow) => {
+      const xs = poly.map((p) => p[0]);
+      const ys = poly.map((p) => p[1]);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      return {
+        x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y,
+        main: !!main, chipLow: !!chipLow, poly,
+      };
+    };
+    return [
+      shape([[0, 0], [mw, 0], [mw + lean, h], [0, h]], true),
+      shape([[mw, 0], [mw + cw, 0], pPt, aPt]),
+      shape([aPt, pPt, [mw + cw + lean, h], [mw + lean, h]], false, true),
+      shape([[mw + cw, 0], [w, 0], [w, by], pPt]),
+      shape([pPt, [w, by], [w, h], [mw + cw + lean, h]]),
+    ];
   }
   if (w < h) {
     // Portrait: hero on top (~52% high), 2x2 satellites below.
@@ -423,6 +463,41 @@ function tracePoly(ctx, poly) {
   ctx.moveTo(poly[0][0], poly[0][1]);
   for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
   ctx.closePath();
+}
+
+/** Where a vertical line at x crosses a panel polygon's outline: the
+ *  topmost and bottommost crossing y, or null when the line misses the
+ *  polygon. Round 19's slanted Grid panels use these to keep the
+ *  caption chips inside their own panel; for a plain rectangle the
+ *  spans are exactly the shape's own edges, so every older layout is
+ *  untouched by the clamps built on them. */
+function polySpanAtX(poly, x) {
+  let top = null;
+  let bot = null;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    if (x1 === x2 || x < Math.min(x1, x2) || x > Math.max(x1, x2)) continue;
+    const y = y1 + ((y2 - y1) * (x - x1)) / (x2 - x1);
+    if (top === null || y < top) top = y;
+    if (bot === null || y > bot) bot = y;
+  }
+  return top === null ? null : { top, bot };
+}
+
+/** The same for a horizontal line at y: leftmost and rightmost x. */
+function polySpanAtY(poly, y) {
+  let left = null;
+  let right = null;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    if (y1 === y2 || y < Math.min(y1, y2) || y > Math.max(y1, y2)) continue;
+    const x = x1 + ((x2 - x1) * (y - y1)) / (y2 - y1);
+    if (left === null || x < left) left = x;
+    if (right === null || x > right) right = x;
+  }
+  return left === null ? null : { left, right };
 }
 
 /** The photo assignment for panel i: panels beyond the loaded list rotate
@@ -1741,19 +1816,40 @@ function drawPanelChips(ctx, shapes, w, h) {
     // sits inside the title band, where a chip would print across the
     // letters, so its chip drops to the panel's lower right instead —
     // the strip beside the script's tail, above the banner, over the
-    // road in the scene. The geometry test (same left edge as the
-    // panel above it, lower top edge) picks that one cell out in any
-    // aspect; portrait and square Grids keep the plain top-left rule.
-    const buried = w > h && shapes[1] && i > 1
-      && shapes[i].x === shapes[1].x && shapes[i].y > shapes[1].y;
-    const x = i === 3
+    // road in the scene. gridShapes flags that one cell `chipLow`;
+    // portrait and square Grids flag nothing and keep the plain
+    // top-left rule.
+    const buried = w > h && !!shapes[i].chipLow;
+    let x = i === 3
       ? shapes[i].x + shapes[i].w - chipW - w * 0.011
       : (buried
         ? shapes[i].x + shapes[i].w - chipW - w * 0.011
         : shapes[i].x + w * 0.011);
-    const y = buried
+    let y = buried
       ? shapes[i].y + shapes[i].h * 0.6
       : shapes[i].y + h * 0.013;
+    // Round 19: the landscape Grid's panels are parallelograms now, so
+    // a chip parked off the bounding box can hang over a slanted edge
+    // onto the neighbouring panel (the marina cell's top-left corner
+    // sits above its own top edge, over the neon cell). Clamp the chip
+    // inside its own polygon: its top must clear the panel's top edge
+    // at both of the chip's x positions, a right-parked chip must
+    // clear the right edge at both of its y positions, and the buried
+    // chip must also clear the bottom edge. For rectangular panels
+    // every span is the shape's own edge and the clamps are no-ops.
+    const mX = w * 0.004;
+    const mY = h * 0.004;
+    const spanL = polySpanAtX(shapes[i].poly, x);
+    const spanR = polySpanAtX(shapes[i].poly, x + chipW);
+    if (spanL) y = Math.max(y, spanL.top + mY);
+    if (spanR) y = Math.max(y, spanR.top + mY);
+    if (i === 3 || buried) {
+      const spanT = polySpanAtY(shapes[i].poly, y);
+      const spanB = polySpanAtY(shapes[i].poly, y + chipH);
+      if (spanT) x = Math.min(x, spanT.right - chipW - mX);
+      if (spanB) x = Math.min(x, spanB.right - chipW - mX);
+    }
+    if (buried && spanR) y = Math.min(y, spanR.bot - chipH - mY);
     ctx.fillStyle = 'rgba(8, 4, 18, 0.8)';
     ctx.fillRect(x, y, chipW, chipH);
     ctx.fillStyle = '#ff2e63';
@@ -1958,8 +2054,14 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
       // leaves 6.0%) — crowns, trunks and her hair cross every
       // placement. So this pill alone is filled OPAQUE: the crowns
       // behind it stay behind it, and nothing silhouettes through
-      // its body the way the translucent fill let them.
-      drawRatingRow(ctx, w, h, h * 0.045, { right: shapes[0].x + shapes[0].w - w * 0.018, opaque: true });
+      // its body the way the translucent fill let them. Round 19: the
+      // pill's right anchor is the hero polygon's own right edge at
+      // the pill's height, not the bounding box's — the box reaches
+      // 0.038w past the slanted edge at the foot of the panel, and a
+      // pill parked off the box would stride across the gutter onto
+      // the fisherman's corner.
+      const heroSpan = polySpanAtY(shapes[0].poly, h * 0.045);
+      drawRatingRow(ctx, w, h, h * 0.045, { right: (heroSpan ? heroSpan.right : shapes[0].x + shapes[0].w) - w * 0.018, opaque: true });
     } else {
       const cy = titleBox
         ? titleBox.baseline - titleBox.size - h * 0.042
@@ -2205,6 +2307,7 @@ export function drawPoster(canvas, state) {
   // Lettering: gradient title with a double outline, neon script tagline.
   const title = (state.title || '').trim().toUpperCase();
   let titleBox = null;
+  let slantOn = false;
   if (mosaic) {
     // In the band: the title is sized to the band's height and the pair
     // (title + tagline) is centred inside the strip — no scrim over the
@@ -2252,8 +2355,30 @@ export function drawPoster(canvas, state) {
       const size = bandTitle
         ? fitFont(ctx, title, w * 0.665, h * 0.34, 'Anton, "Arial Black", sans-serif')
         : fitFont(ctx, title, heroCx != null ? w * 0.64 : w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
+      // Round 19: the band title SLANTS with the rebuilt grid. The
+      // whole lettering block — title and script, rotated as one rigid
+      // piece about a pivot between them — climbs 3 degrees to the
+      // right: the direction the satellite block's row divider climbs
+      // and the winning covers' titles climb, so the letters read as
+      // part of the collage, overlapping panel edges, instead of a
+      // flat slab laid across it. Fit, centre and width are the flat
+      // band's own (the rotation costs a cos(3°) sliver of projected
+      // width, still well past three-fifths of the frame); the
+      // extrusion rotates with the glyphs, as a real block of letters
+      // would. The block also rides a touch higher than the flat band
+      // did (baseline 0.738, script 0.852): rotation drops the
+      // script's left tail by ~0.02h, and the lift keeps that tail
+      // clear of the banner strip's top edge while the title's rising
+      // right end uncovers more of the causeway panel beneath it.
+      if (bandTitle) {
+        ctx.save();
+        ctx.translate(w * 0.36, h * 0.8);
+        ctx.rotate(-0.052);
+        ctx.translate(-w * 0.36, -h * 0.8);
+        slantOn = true;
+      }
       titleBox = drawTitle(ctx, w, title, noir, size,
-        bandTitle ? h * 0.745 : (dressed ? h * 0.752 : h * 0.865),
+        bandTitle ? h * 0.738 : (dressed ? h * 0.752 : h * 0.865),
         { cx: bandTitle ? w * 0.36 : (heroCx ?? w / 2), stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth });
       titleBox.band = bandTitle;
     }
@@ -2277,9 +2402,12 @@ export function drawPoster(canvas, state) {
     // only the car's zone and her belt line below them.
     drawTagline(ctx, w, h, tag, noir, titleBox,
       titleBox && titleBox.band
-        ? { cx: w * 0.345, maxW: w * 0.46, start: titleBox.size * 0.42, baseline: h * 0.862 }
+        ? { cx: w * 0.345, maxW: w * 0.46, start: titleBox.size * 0.42, baseline: h * 0.852 }
         : (heroTagged ? { cx: titleBox.cx, maxW: w * 0.52 } : {}));
   }
+  // The slanted band's rotation ends with the script: the dressing
+  // and the frame that follow are drawn level, as they always were.
+  if (slantOn) ctx.restore();
 
   // Poster dressing: seal, rating row, panel chips, banner strip and
   // microtext — drawn over the lettering, under the frame.
