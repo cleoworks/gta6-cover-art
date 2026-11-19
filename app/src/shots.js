@@ -3,8 +3,10 @@
 //   ?shot=cover&layout=trio&grade=noir&size=1920x1080 — the exported PNG itself,
 //   shown full-bleed so the screenshot is the PNG the app wrote, scaled down.
 // `photo` picks the sample for panel 1 (samples/<photo>.jpg), `photo2` for
-// panel 2, `photo3` for panel 3; panel 4 re-crops photo 1 tighter, panel 5
-// re-crops photo 2 wider so the fisherman's whole head sits inside the cell. window.__shotReady is set once the scene is painted.
+// panel 2, `photo3` for panel 3, `photo4` for panel 4 (the night sample, so
+// a Grid shows four different photos); panel 5 re-crops photo 2 wider so the
+// fisherman's whole head sits inside the cell. window.__shotReady is set
+// once the scene is painted.
 import { GRADES, LAYOUTS, SIZES } from './poster.js';
 
 export async function runShot(shot, query, helpers) {
@@ -16,12 +18,14 @@ export async function runShot(shot, query, helpers) {
   if (query.get('title')) state.title = query.get('title');
   if (query.get('tagline')) state.tagline = query.get('tagline');
 
-  // Load the samples into the panels: three distinct photos up front, then
-  // re-crops — so a Trio shows three different photos, a Grid five panels.
+  // Load the samples into the panels: four distinct photos up front, then
+  // a wide re-crop — so a Trio shows three different photos, a Grid five
+  // panels over four photos, and Mosaic repeats less.
   const first = `samples/${query.get('photo') ?? 'boulevard'}.jpg`;
   const second = `samples/${query.get('photo2') ?? 'pier'}.jpg`;
   const third = `samples/${query.get('photo3') ?? 'convertible'}.jpg`;
-  const [imgA, imgB, imgC] = await Promise.all([loadImage(first), loadImage(second), loadImage(third)]);
+  const fourth = `samples/${query.get('photo4') ?? 'night'}.jpg`;
+  const [imgA, imgB, imgC, imgD] = await Promise.all([loadImage(first), loadImage(second), loadImage(third), loadImage(fourth)]);
   const put = (i, src, img, framing) => {
     if (!state.panels[i]) return;
     state.panels[i].img = img;
@@ -31,7 +35,7 @@ export async function runShot(shot, query, helpers) {
   put(0, first, imgA);
   put(1, second, imgB);
   put(2, third, imgC);
-  put(3, first, imgA, { zoom: 1.35, ox: 0.3, oy: 0.4 });
+  put(3, fourth, imgD);
   put(4, second, imgB, { zoom: 1.02, ox: 0.3, oy: 1 });
 
   // Keep the editor controls in sync with the scene's choices.

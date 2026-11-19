@@ -12,8 +12,9 @@
 // (Sunset, Neon Nights, Palm Gold, Noir, Poster Ink — all gradient-mapped,
 // Poster Ink with a highlight-masked halftone) and a post size, type a title
 // and a tagline, and export a PNG (one size, or all three at once).
-// Its three sample photos (app/samples/) were made for make.fun with an
-// image model and are free to use.
+// Its four sample photos (app/samples/) were made for make.fun with an
+// image model and are free to use: three bright Vice scenes and one neon
+// night portrait, so a dark photo is part of the demo too.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

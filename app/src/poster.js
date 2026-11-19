@@ -3,7 +3,9 @@
 // A poster is: photo panels graded through a per-grade gradient-map LUT with
 // tonal posterizing (cel feel; the Poster Ink grade goes further — a firm
 // screen-print posterize plus a luminance-masked halftone that lives in the
-// highlights only), firm gutters, a slit sun sitting on the sea panel's
+// highlights only; Noir and Poster Ink protect their shadows, cross-fading
+// the posterized ramp to a smooth one at low luminance so shaded faces
+// keep their features), firm gutters, a slit sun sitting on the sea panel's
 // horizon, code-drawn palms, a print finishing pass (grain + vignette), then
 // layered lettering: a sunset-gradient title with a double outline and a
 // neon script tagline.
@@ -73,7 +75,13 @@ export const GRADES = {
     sunCore: '#ffffff',
     sunStops: ['#ffffff', '#c9c9c9', '#6e6e6e'],
     sunRim: 'rgba(235, 235, 235, 0.9)',
-    ramp: [[0, [8, 8, 8]], [0.25, [56, 56, 56]], [0.5, [128, 128, 128]], [0.75, [198, 198, 198]], [1, [255, 255, 255]]],
+    // The ramp's floor is lifted and its shadow stops are widened, and the
+    // grade carries shadow protection (see `protect` in gradedPanelCanvas):
+    // a hard six-step posterize over a monochrome ramp used to crush
+    // shadowed faces into a single grey plateau.
+    ramp: [[0, [26, 26, 26]], [0.22, [74, 74, 74]], [0.45, [130, 130, 130]], [0.7, [192, 192, 192]], [1, [255, 255, 255]]],
+    ease: [0.2, 0.8],
+    protect: [0.05, 0.55],
     mix: 1,
     accent: '#f2f2f2',
     tagText: '#0a0a0a',
@@ -90,7 +98,13 @@ export const GRADES = {
     sun: '#f7e3ac',
     sunCore: '#fdf3d0',
     sunStops: ['#fdf3d0', '#f5b95e', '#e2703a'],
-    ramp: [[0, [20, 16, 54]], [0.22, [52, 38, 104]], [0.45, [196, 102, 84]], [0.72, [242, 170, 96]], [1, [250, 236, 204]]],
+    // The ink floor is lifted (deep indigo, not near-black) and the warm
+    // terracotta stop arrives earlier, with shadow protection like Noir:
+    // at four firm steps a backlit face otherwise falls entirely into the
+    // darkest plateau and its features drown.
+    ramp: [[0, [40, 32, 78]], [0.22, [78, 58, 128]], [0.42, [198, 104, 86]], [0.7, [242, 170, 96]], [1, [250, 236, 204]]],
+    ease: [0.26, 0.74],
+    protect: [0.04, 0.6],
     mix: 0.88,
     steps: 4,
     halftone: true,
@@ -244,10 +258,10 @@ function smoothstep(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-function posterT(t, steps = TONAL_STEPS) {
+function posterT(t, steps = TONAL_STEPS, ease = [0.32, 0.68]) {
   const s = t * (steps - 1);
   const i = Math.min(steps - 2, Math.floor(s));
-  return (i + smoothstep(0.32, 0.68, s - i)) / (steps - 1);
+  return (i + smoothstep(ease[0], ease[1], s - i)) / (steps - 1);
 }
 
 function rampAt(stops, t) {
@@ -264,19 +278,32 @@ function rampAt(stops, t) {
 
 /** 256-entry luminance -> RGB table for a grade, posterized to the grade's
  *  tonal steps (six for the soft cel grades, four for Poster Ink's firmer
- *  screen-print plateaus). */
-export function gradeLUT(gradeKey) {
-  if (lutCache.has(gradeKey)) return lutCache.get(gradeKey);
+ *  screen-print plateaus; a grade's `ease` widens or narrows the blend
+ *  between steps). With `smooth` set, the same ramp without posterizing —
+ *  the shadow-protection blend target for grades that carry `protect`. */
+export function gradeLUT(gradeKey, smooth = false) {
+  const cacheKey = smooth ? gradeKey + ':smooth' : gradeKey;
+  if (lutCache.has(cacheKey)) return lutCache.get(cacheKey);
   const grade = GRADES[gradeKey] ?? GRADES.sunset;
   const lut = new Uint8Array(256 * 3);
   for (let v = 0; v < 256; v++) {
-    const [r, g, b] = rampAt(grade.ramp, posterT(v / 255, grade.steps ?? TONAL_STEPS));
+    const t = v / 255;
+    const [r, g, b] = rampAt(grade.ramp, smooth ? t : posterT(t, grade.steps ?? TONAL_STEPS, grade.ease));
     lut[v * 3] = r;
     lut[v * 3 + 1] = g;
     lut[v * 3 + 2] = b;
   }
-  lutCache.set(gradeKey, lut);
+  lutCache.set(cacheKey, lut);
   return lut;
+}
+
+/** Small deterministic integer hash -> [0, 1), stable per (a, b) across
+ *  renders and machines, so jittered halftone dots never shimmer between
+ *  the preview and the export. */
+function dotHash(a, b) {
+  let n = (Math.imul(a + 1, 374761393) + Math.imul(b + 1, 668265263)) >>> 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 }
 
 /** Poster Ink's halftone screen: dots of the grade's deep ink colour on a
@@ -284,24 +311,30 @@ export function gradeLUT(gradeKey) {
  *  mask only opens in the highlights (sky, paper-bright areas) and closes
  *  completely through the midtones and shadows, so faces stay clean and the
  *  texture reads as print in the background only. Luminance is sampled from
- *  the already-posterized panel, so the dots follow the print plateaus. */
+ *  the already-posterized panel, so the dots follow the print plateaus.
+ *  Each dot centre is jittered deterministically by up to ±22% of the
+ *  pitch: an un-jittered grid draws a visibly mechanical dotted line
+ *  wherever a bright band (sea glint) crosses the screen. */
 function applyHalftone(ctx, cw, ch, data, grade) {
   const pitch = Math.max(6, Math.min(15, Math.round(Math.min(cw, ch) / 60)));
   const [ir, ig, ib] = grade.ramp[0][1];
   ctx.save();
-  ctx.fillStyle = `rgba(${ir}, ${ig}, ${ib}, 0.72)`;
+  ctx.fillStyle = `rgba(${ir}, ${ig}, ${ib}, 0.6)`;
   ctx.beginPath();
   let row = 0;
-  for (let y = pitch / 2; y < ch; y += pitch, row++) {
+  for (let gy = pitch / 2; gy < ch; gy += pitch, row++) {
     const off = row % 2 ? pitch / 2 : 0;
-    for (let x = pitch / 2 + off; x < cw; x += pitch) {
-      const px = Math.min(cw - 1, Math.round(x));
-      const py = Math.min(ch - 1, Math.round(y));
+    let col = 0;
+    for (let gx = pitch / 2 + off; gx < cw; gx += pitch, col++) {
+      const x = gx + (dotHash(col, row) - 0.5) * pitch * 0.44;
+      const y = gy + (dotHash(row, col + 57) - 0.5) * pitch * 0.44;
+      const px = Math.max(0, Math.min(cw - 1, Math.round(x)));
+      const py = Math.max(0, Math.min(ch - 1, Math.round(y)));
       const o = (py * cw + px) * 4;
       const lum = (data[o] * 77 + data[o + 1] * 150 + data[o + 2] * 29) >> 8;
       const s = smoothstep(0.67, 0.96, lum / 255);
       if (s <= 0.02) continue;
-      const r = s * pitch * 0.48;
+      const r = s * pitch * 0.42;
       ctx.moveTo(x + r, y);
       ctx.arc(x, y, r, 0, Math.PI * 2);
     }
@@ -337,6 +370,14 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
   let graded = null;
   if (mix > 0) {
     const lut = gradeLUT(gradeKey);
+    // Shadow protection (grades that carry `protect`: Noir, Poster Ink).
+    // Through the protect band the posterized ramp is cross-faded to the
+    // same ramp un-posterized, weighted by the pixel's own luminance:
+    // deep shadow renders smooth, so a face sitting in shade keeps its
+    // eyes and features instead of collapsing into one flat plateau,
+    // while highlights and skies keep the full print steps.
+    const protect = grade.protect;
+    const smoothLut = protect ? gradeLUT(gradeKey, true) : null;
     const data = ctx.getImageData(0, 0, cw, ch);
     const px = data.data;
     for (let i = 0; i < px.length; i += 4) {
@@ -345,9 +386,18 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
       const b = px[i + 2];
       const lum = (r * 77 + g * 150 + b * 29) >> 8;
       const o = lum * 3;
-      px[i] = r + (lut[o] - r) * mix;
-      px[i + 1] = g + (lut[o + 1] - g) * mix;
-      px[i + 2] = b + (lut[o + 2] - b) * mix;
+      let tr = lut[o];
+      let tg = lut[o + 1];
+      let tb = lut[o + 2];
+      if (smoothLut) {
+        const wgt = smoothstep(protect[0], protect[1], lum / 255);
+        tr = smoothLut[o] + (tr - smoothLut[o]) * wgt;
+        tg = smoothLut[o + 1] + (tg - smoothLut[o + 1]) * wgt;
+        tb = smoothLut[o + 2] + (tb - smoothLut[o + 2]) * wgt;
+      }
+      px[i] = r + (tr - r) * mix;
+      px[i + 1] = g + (tg - g) * mix;
+      px[i + 2] = b + (tb - b) * mix;
     }
     ctx.putImageData(data, 0, 0);
     graded = px;
@@ -432,12 +482,12 @@ const PIER_HORIZON = 0.345;
 const SUN_FX = {
   trio: { land: 0.685, sq: 0.58, port: 0.565 },
   duo: { land: 0.78, sq: 0.64, port: 0.6 },
-  grid: { land: 0.68, sq: 0.625, port: 0.78 },
+  grid: { land: 0.7, sq: 0.625, port: 0.78 },
 };
 const SUN_R = {
   trio: { land: 0.072, sq: 0.065, port: 0.065 },
   duo: { land: 0.072, sq: 0.065, port: 0.065 },
-  grid: { land: 0.062, sq: 0.05, port: 0.065 },
+  grid: { land: 0.052, sq: 0.05, port: 0.065 },
 };
 
 export function sunAnchor(state, shapes, w, h) {
@@ -561,16 +611,22 @@ function fitFont(ctx, text, maxW, startSize, family) {
 // rimmed by one thin complementary line.
 const TITLE_STOPS = [[0, '#3060ce'], [0.38, '#913bc2'], [0.68, '#ff5395'], [1, '#ff944c']];
 
-function drawTitle(ctx, w, h, title, noir) {
-  const size = fitFont(ctx, title, w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
+function drawTitle(ctx, w, h, title, noir, scale = 1) {
+  const size = fitFont(ctx, title, w * 0.94, h * 0.17 * scale, 'Anton, "Arial Black", sans-serif');
   const baseline = h * 0.865;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
   const grad = ctx.createLinearGradient(0, baseline - size, 0, baseline + size * 0.12);
   if (noir) {
+    // Metallic silver: a bright face, a darker waist, a second sheen —
+    // the premium monochrome lettering of the classic crime cover, never
+    // flat white.
     grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(1, '#9a9a9a');
+    grad.addColorStop(0.38, '#f2f2f2');
+    grad.addColorStop(0.62, '#a3a3a3');
+    grad.addColorStop(0.82, '#dedede');
+    grad.addColorStop(1, '#8a8a8a');
   } else {
     for (const [p, c] of TITLE_STOPS) grad.addColorStop(p, c);
   }
@@ -710,16 +766,21 @@ export function drawPoster(canvas, state) {
   // Print finishing over the composite, before the lettering.
   applyFinishing(ctx, w, h);
 
-  // Scrim so the lettering reads over any photo.
-  const scrim = ctx.createLinearGradient(0, h * 0.52, 0, h);
+  // Scrim so the lettering reads over any photo. Mosaic's nine cells are
+  // the layout's whole argument, so its scrim starts lower and its
+  // lettering block is scaled down — the bottom row of cells stays
+  // readable as panels instead of drowning under the title.
+  const mosaic = state.layout === 'mosaic';
+  const scrimTop = mosaic ? 0.64 : 0.52;
+  const scrim = ctx.createLinearGradient(0, h * scrimTop, 0, h);
   scrim.addColorStop(0, `rgba(${grade.scrim}, 0)`);
   scrim.addColorStop(1, `rgba(${grade.scrim}, 0.82)`);
   ctx.fillStyle = scrim;
-  ctx.fillRect(0, h * 0.52, w, h * 0.48);
+  ctx.fillRect(0, h * scrimTop, w, h * (1 - scrimTop));
 
   // Lettering: gradient title with a double outline, neon script tagline.
   const title = (state.title || '').trim().toUpperCase();
-  const titleBox = title ? drawTitle(ctx, w, h, title, noir) : null;
+  const titleBox = title ? drawTitle(ctx, w, h, title, noir, mosaic ? 0.8 : 1) : null;
   const tag = (state.tagline || '').trim();
   if (tag) drawTagline(ctx, w, h, tag, noir, titleBox);
 
