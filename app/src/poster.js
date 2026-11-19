@@ -138,7 +138,35 @@ export const GRADES = {
     // green sits above their blue everywhere — so no other subject's
     // skin moves; saturated props (the red dress, the convertible)
     // fall outside the saturation band.
-    magentaTame: { angle: 0.85, target: 18 },
+    // Round 23 (`notch`): the tame's two fades manufacture the last
+    // defect. Measured stage by stage on the Duo pier panel, the ramp
+    // mix drags the fisherman's skin to hue 300–360 (68–89% of his
+    // saturated skin pixels at 330+). The tame rotates the moderate-
+    // saturation part home, but two populations escape: skin the
+    // detectors could not moderate takes the full saturation lift to
+    // 0.62–0.78, past the tame's saturation fade, and is only half-
+    // rotated in transit into a pile at 354–358; and the sector's own
+    // 350–356 fade strands the rest in the same pile — past the fade,
+    // short of red — where the fringe tame cannot follow (its
+    // neighbourhood gate stands down on smooth skin fields, by
+    // design). In the round-22 render, 80–99% of every skin region's
+    // surviving magenta-sector pixels sit in that pile: the mottle
+    // the micro judge failed on the portrait's face, neck and chest.
+    // The notch arm is the tame's skin override: for pixels the
+    // SOURCE detector read as skin it restores the tame's full sector
+    // weight (rising 280–305 like the tame itself, no 350–356 fade)
+    // under a wider saturation band (fade 0.62–0.78), still fading
+    // out at 357.5–359.5 so skin that natively sits at 359 — the
+    // marina subject's cheek — keeps the round-13 protection. The
+    // detector speaks with three voices (see gradedPanelCanvas): the
+    // lit-skin test, a shaded companion, and a near-neutral test for
+    // the deepest shade skin, whose red still holds at or above its
+    // green where blue-shadowed cloth turns green-led. Non-skin never
+    // qualifies (sea, sky and signage fail every voice), and mean-
+    // measure renders skip the arm like they skip the fringe tame,
+    // so the harmonize gains — and with them every non-skin pixel of
+    // every panel — stay exactly where round 22 put them.
+    magentaTame: { angle: 0.85, target: 18, notch: [280, 305, 357.5, 359.5] },
     // Round 14 (`fringeTame`): the magenta tame above cleared the
     // 280–350 sector, but the round-13 micro judge still failed the
     // pier fisherman's beard: measured on the export, a large share
@@ -1147,6 +1175,32 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
         }
         let mixP = mix;
         let satP = eSat;
+        // The source pixel's skin weight, kept for the magenta tame's
+        // notch arm below (round 23): that arm may only touch pixels
+        // the detector read as skin before the ramp repainted them.
+        // Two companions feed the arm beside the main test. The
+        // shaded test (the white-balance shield's pink-lit test,
+        // moved to the source pixel) covers skin that rides blue so
+        // high its red-blue gap is ~0.04 of full scale, under the main
+        // test's 0.06–0.16 ramp; its value ceiling (0.62–0.75) keeps
+        // it off the bright surfaces that share the shaded hue
+        // family — the singlet's blue-shadowed cloth (value ~0.87)
+        // and the marina subject's brighter shaded cheek. The neutral
+        // test covers the deepest shade, where the chest's skin is
+        // near-neutral altogether (saturation 0.09–0.27, red level
+        // with blue): no per-pixel skin test can see it, but it still
+        // reads as skin against the cloth beside it — shaded skin
+        // keeps red at or above green, while the singlet's blue
+        // shadow is green-led and fails, and its value ceiling
+        // (0.66–0.78) keeps it off sunlit cloth and bright cheeks.
+        // Measured on the portrait chest's pile: main test 0.01,
+        // shaded test ~0.3, neutral test ~0.6 — against 0.96–0.99
+        // from the main test on the lit face and neck. The companions
+        // feed ONLY the notch arm: the mix and saturation moderation
+        // below keep the round-22 detector exactly, so nothing
+        // outside the arm's hue window changes by a single level.
+        let skinW = 0;
+        let notchW = 0;
         if (skinOn) {
           const mx = Math.max(r, g, b);
           const mn = Math.min(r, g, b);
@@ -1158,7 +1212,45 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
               * (1 - smoothstep(tameRgHi[0], tameRgHi[1], (r - g) / 255))
               * (1 - smoothstep(tameBright[0], tameBright[1], mx / 255))
               * smoothstep(30, 70, mx);
+            const shadeW = smoothstep(0.05, 0.14, sat) * (1 - smoothstep(0.72, 0.87, sat))
+              * smoothstep(0, 0.05, (r - b) / 255)
+              * (1 - smoothstep(0.52, 0.67, (r - g) / 255))
+              * (1 - smoothstep(0.62, 0.75, mx / 255))
+              * smoothstep(28, 64, mx);
+            notchW = Math.max(wgt, shadeW);
+            // The arm's own, stricter read of the same two voices
+            // (round 23): the rotation it drives is a far bigger move
+            // than the mix moderation above, so its gate is cut to
+            // skin's actual envelope — saturation ceilings at
+            // 0.40–0.50 (lit) and 0.45–0.60 (shaded) leave hair,
+            // saturated cloth, car paint and signage outside, and a
+            // value ceiling at 0.80–0.88 leaves the bright sunset
+            // sky outside. The fisherman's skin (saturation ≤ ~0.45,
+            // value ≤ ~0.84 even lit) keeps the weight it needs: at
+            // the pile's short arc a partial weight still rotates
+            // home. Only notchW is recomputed; skinW — and with it
+            // the round-22 moderation and shield — is untouched.
+            const armW = smoothstep(0.08, 0.2, sat) * (1 - smoothstep(0.4, 0.5, sat))
+              * smoothstep(0.06, 0.16, (r - b) / 255)
+              * (1 - smoothstep(tameRgHi[0], tameRgHi[1], (r - g) / 255))
+              * (1 - smoothstep(0.8, 0.88, mx / 255))
+              * smoothstep(30, 70, mx);
+            const armShadeW = smoothstep(0.05, 0.14, sat) * (1 - smoothstep(0.45, 0.6, sat))
+              * smoothstep(0, 0.05, (r - b) / 255)
+              * (1 - smoothstep(0.52, 0.67, (r - g) / 255))
+              * (1 - smoothstep(0.62, 0.75, mx / 255))
+              * smoothstep(28, 64, mx);
+            notchW = Math.max(armW, armShadeW);
           }
+          if (mx > 40) {
+            const sat = (mx - mn) / mx;
+            const neutralW = smoothstep(0, 0.04, (r - g) / 255)
+              * (1 - smoothstep(0.22, 0.32, sat))
+              * (1 - smoothstep(0.66, 0.78, mx / 255))
+              * smoothstep(28, 64, mx);
+            if (neutralW > notchW) notchW = neutralW;
+          }
+          skinW = wgt;
           if (wgt > 0) {
             mixP = mix * (1 - tameMix * wgt);
             satP = 1 + (eSat - 1) * (1 - tameSat * wgt);
@@ -1259,16 +1351,44 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
             else hue = 60 * ((nb - nr) / d + 2);
             if (hue < 0) hue += 360;
             if (hue >= 280) {
-              let mw = smoothstep(280, 305, hue)
-                * (1 - smoothstep(350, 356, hue))
-                * smoothstep(0.1, 0.2, sat) * (1 - smoothstep(0.5, 0.62, sat))
+              // Blue-led pixels are the panel's shade and sky far more
+              // often than its skin: they rotate at reduced weight.
+              const satBand = smoothstep(0.1, 0.2, sat) * (1 - smoothstep(0.5, 0.62, sat));
+              const gates = satBand
                 * smoothstep(0.03, 0.1, (nr - ng) / 255)
                 * (1 - smoothstep(0.55, 0.7, (nr - ng) / 255))
                 * smoothstep(40, 80, mx) * (1 - smoothstep(0.94, 0.99, mx / 255))
-                * smoothstep(0.86, 0.98, nr / mx);
-              // Blue-led pixels are the panel's shade and sky far more
-              // often than its skin: they rotate at reduced weight.
-              if (mx === nb) mw *= 0.6;
+                * smoothstep(0.86, 0.98, nr / mx)
+                * (mx === nb ? 0.6 : 1);
+              let mw = smoothstep(280, 305, hue)
+                * (1 - smoothstep(350, 356, hue))
+                * gates;
+              // The notch arm (round 23, see the grade's own note):
+              // source-detected skin takes the tame's full sector
+              // weight without the 350–356 fade, so the half-rotated
+              // pile at 354–358 rotates home with the rest of the
+              // sector. The arm reads the saturation band wider than
+              // the tame (fade 0.62–0.78, not 0.5–0.62): the chest's
+              // pile is manufactured in transit — pixels the detectors
+              // could not moderate take the full saturation lift to
+              // 0.62–0.78, where the tame's own band stands down — and
+              // the source voices are the arm's real gate: saturated
+              // props fail all three. Mean-measure renders skip the
+              // arm, like the fringe tame, so it cannot steer the
+              // harmonize gains.
+              if (!meanMeasure && magTame.notch && notchW > 0 && hue >= magTame.notch[0]) {
+                const n = magTame.notch;
+                const wideSat = smoothstep(0.1, 0.2, sat) * (1 - smoothstep(0.62, 0.78, sat));
+                const nw = notchW * smoothstep(n[0], n[1], hue)
+                  * (1 - smoothstep(n[2], n[3], hue))
+                  * wideSat
+                  * smoothstep(0.03, 0.1, (nr - ng) / 255)
+                  * (1 - smoothstep(0.55, 0.7, (nr - ng) / 255))
+                  * smoothstep(40, 80, mx) * (1 - smoothstep(0.94, 0.99, mx / 255))
+                  * smoothstep(0.86, 0.98, nr / mx)
+                  * (mx === nb ? 0.6 : 1);
+                if (nw > mw) mw = nw;
+              }
               if (mw > 0) {
                 const nh0 = hue + ((360 - hue) + magTame.target) * magTame.angle * mw;
                 const nh = nh0 >= 360 ? nh0 - 360 : nh0;
