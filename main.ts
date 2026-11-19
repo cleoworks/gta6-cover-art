@@ -8,9 +8,11 @@
 // make.fun library (vendor/makefun-app.ts, unchanged).
 //
 // The app itself: pick a photo per panel, crop it by dragging, pick a layout
-// (Vice Trio / Split Duo / Solo Hero / Cover Grid / Mosaic), a colour grade
+// (Vice Trio / Split Duo / Solo Hero / Cover Grid / Mosaic — Mosaic's
+// lettering sits in a title band below its nine panels), a colour grade
 // (Sunset, Neon Nights, Palm Gold, Noir, Poster Ink — all gradient-mapped,
-// Poster Ink with a highlight-masked halftone) and a post size, type a title
+// Poster Ink with a highlight-masked halftone, Noir with an ordered Bayer
+// dither through its posterize) and a post size, type a title
 // and a tagline, and export a PNG (one size, or all three at once).
 // Its five sample photos (app/samples/) were made for make.fun with an
 // image model and are free to use: three bright Vice scenes, one neon

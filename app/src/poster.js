@@ -3,15 +3,21 @@
 // A poster is: photo panels graded through a per-grade gradient-map LUT with
 // tonal posterizing (cel feel; the Poster Ink grade goes further — a firm
 // screen-print posterize plus a halftone that lives in smooth highlights
-// only and fades over detailed texture; Noir and Poster Ink protect their
-// shadows, cross-fading the posterized ramp to a smooth one at low
-// luminance so shaded faces keep their features), firm gutters, a slit sun
-// sitting on the sea panel's horizon, code-drawn palms, a print finishing
-// pass (grain + vignette), then layered lettering: a sunset-gradient title
-// with a double outline and a neon script tagline. Dark photos are steadied
-// first by a gated auto-exposure lift (bright photos pass through
-// untouched), and a photo shown twice in one layout is mirrored on its
-// later showings so the repeat reads as a different moment.
+// only and fades over detailed texture and off bright neutral surfaces
+// entirely; Noir and Poster Ink protect their shadows, cross-fading the
+// posterized ramp to a smooth one at low luminance so shaded faces keep
+// their features, and Noir additionally breaks its flat B/W plateaus with
+// a Bayer ordered dither so faces keep their tonal modelling), firm
+// gutters, a slit sun sitting on the sea panel's horizon, code-drawn
+// palms, a print finishing pass (grain + vignette), then layered
+// lettering: a sunset-gradient title with a double outline and a neon
+// script tagline (Mosaic instead gives its lettering a title band below
+// the grid, so all nine panels stay fully visible). Dark photos are
+// steadied first by a gated auto-exposure lift (bright photos pass
+// through untouched; very dark photos are lifted hard, under a highlight
+// shoulder that keeps lit signs from blowing out), and a photo shown
+// twice in one layout is mirrored on its later showings so the repeat
+// reads as a different moment.
 
 export const SIZES = {
   '1080x1080': [1080, 1080],
@@ -91,9 +97,16 @@ export const GRADES = {
     // higher still: the hard-edged shadow a hat brim throws across a face
     // lives exactly in that band, and softening its cross-fade there is
     // what keeps the brim line from printing as a stripe over the eyes.
+    // Protection alone was not enough for B/W: a lit forehead still fell
+    // inside one plateau and printed as a flat mask. So Noir also carries
+    // `dither` — an ordered Bayer dither on the posterize quantization
+    // (see gradedPanelCanvas) that breaks every plateau into a fine print
+    // texture whose average is the smooth tone, restoring the gradation
+    // the steps removed.
     ramp: [[0, [34, 34, 34]], [0.22, [84, 84, 84]], [0.45, [130, 130, 130]], [0.7, [192, 192, 192]], [1, [255, 255, 255]]],
     ease: [0.2, 0.8],
     protect: [0.04, 0.72],
+    dither: 1,
     mix: 1,
     accent: '#f2f2f2',
     tagText: '#0a0a0a',
@@ -326,6 +339,20 @@ export function gradeLUT(gradeKey, smooth = false) {
   return lut;
 }
 
+/** Bayer 8x8 ordered-dither thresholds (0..63), the classic dispersed-dot
+ *  matrix: neighbouring thresholds are far apart in value, so a partially
+ *  spilled plateau reads as fine print texture, never as clumps. */
+const BAYER8 = [
+  [0, 32, 8, 40, 2, 34, 10, 42],
+  [48, 16, 56, 24, 50, 18, 58, 26],
+  [12, 44, 4, 36, 14, 46, 6, 38],
+  [60, 28, 52, 20, 62, 30, 54, 22],
+  [3, 35, 11, 43, 1, 33, 9, 41],
+  [51, 19, 59, 27, 49, 17, 57, 25],
+  [15, 47, 7, 39, 13, 45, 5, 37],
+  [63, 31, 55, 23, 61, 29, 53, 21],
+];
+
 /** Small deterministic integer hash -> [0, 1), stable per (a, b) across
  *  renders and machines, so jittered halftone dots never shimmer between
  *  the preview and the export. */
@@ -345,9 +372,16 @@ function dotHash(a, b) {
  *  - Neutral-bright: a bright, low-saturation surface (a white singlet,
  *    a sunlit wall) is luminance's blind spot — it is as bright as sky
  *    and nearly as smooth in its centre, but dots on it read as dirt on
- *    clothing, not print texture. The screen is damped (not erased)
- *    there; genuinely coloured bright areas (sunset sky, sea glint)
- *    keep it in full. */
+ *    clothing, not print texture. There the screen now fades out
+ *    COMPLETELY. The fade's saturation edge is set from the bundled
+ *    photos' own measurements, not by eye: the pier singlet's bright
+ *    fabric measures saturation ≈ 0.10 (98% of its bright pixels under
+ *    0.16), while the boulevard sky's pale core measures ≈ 0.22 (only
+ *    ~18% under 0.16) and its mid sky (luminance ±0.46) never reaches
+ *    the luminance edge at all — so a full fade below saturation 0.12–
+ *    0.16 at luminance above ~0.68 erases the screen from the clothing
+ *    and leaves the sky's screen standing. Genuinely coloured bright
+ *    areas (sunset sky, sea glint) keep the screen in full. */
 function halftoneGateMap(px, cw, ch) {
   const lum = new Float32Array(cw * ch);
   const sat = new Float32Array(cw * ch);
@@ -370,8 +404,8 @@ function halftoneGateMap(px, cw, ch) {
       const xp = Math.min(cw - 1, x + s);
       const tex = Math.abs(lum[yw + xp] - lum[yw + xm]) + Math.abs(lum[yp + x] - lum[ym + x]);
       const texGate = 1 - smoothstep(4.5, 12, tex);
-      const neutral = smoothstep(0.62, 0.82, lum[yw + x] / 255) * (1 - smoothstep(0.16, 0.3, sat[yw + x]));
-      gate[yw + x] = texGate * (1 - 0.55 * neutral);
+      const neutral = smoothstep(0.6, 0.68, lum[yw + x] / 255) * (1 - smoothstep(0.12, 0.16, sat[yw + x]));
+      gate[yw + x] = texGate * (1 - neutral);
     }
   }
   return gate;
@@ -387,9 +421,11 @@ function halftoneGateMap(px, cw, ch) {
  *  source is detailed — fabric weave, hair, foliage — or bright but
  *  neutral (white clothing), the dots fade out even in bright areas,
  *  while smooth, coloured bright areas (sky, sea, glint) keep the full
- *  screen. Each dot centre is jittered deterministically by up to ±22% of
- *  the pitch: an un-jittered grid draws a visibly mechanical dotted line
- *  wherever a bright band (sea glint) crosses the screen. */
+ *  screen. Each dot centre is jittered deterministically by up to ±40% of
+ *  the pitch: an un-jittered (or barely jittered) grid draws a visibly
+ *  mechanical dotted line wherever a bright band (sea glint) crosses the
+ *  screen, and at ±40% the rows dissolve into an organic scatter while
+ *  the screen's density stays even. */
 function applyHalftone(ctx, cw, ch, data, grade, gate) {
   const pitch = Math.max(6, Math.min(15, Math.round(Math.min(cw, ch) / 60)));
   const [ir, ig, ib] = grade.ramp[0][1];
@@ -416,8 +452,8 @@ function applyHalftone(ctx, cw, ch, data, grade, gate) {
     const off = row % 2 ? pitch / 2 : 0;
     let col = 0;
     for (let gx = pitch / 2 + off; gx < cw; gx += pitch, col++) {
-      const x = gx + (dotHash(col, row) - 0.5) * pitch * 0.44;
-      const y = gy + (dotHash(row, col + 57) - 0.5) * pitch * 0.44;
+      const x = gx + (dotHash(col, row) - 0.5) * pitch * 0.8;
+      const y = gy + (dotHash(row, col + 57) - 0.5) * pitch * 0.8;
       const px = Math.max(0, Math.min(cw - 1, Math.round(x)));
       const py = Math.max(0, Math.min(ch - 1, Math.round(y)));
       const o = (py * cw + px) * 4;
@@ -451,12 +487,11 @@ const panelCache = new Map(); // graded panel canvases, keyed by photo+grade+fra
 const EXPO_GATE = 0.33;
 
 // Below this mean a photo is not just dim but very dark (the night
-// portrait, at 0.236, is the bundled case): the gate band's gentle slope
-// leaves its faces a notch too dark, so very dark photos get a stronger
-// gamma whose value continues the gate band's curve at the threshold,
-// plus a soft highlight shoulder — a plain strong gamma would push lit
-// neon signs up into one clipped plateau, while the shoulder keeps their
-// separation and the night keeps its mood.
+// portrait, at 0.236, is the bundled case): it gets a substantially
+// stronger gamma than the gate band's gentle slope — the band's slope
+// left the night portrait's face a full step too dark to read — plus a
+// soft highlight shoulder, so the stronger lift cannot push lit neon
+// signs up into one clipped plateau (see photoExposure).
 const EXPO_VERY_DARK = 0.26;
 
 function photoExposure(img) {
@@ -479,9 +514,15 @@ function photoExposure(img) {
       let shoulder = false;
       if (mean < EXPO_VERY_DARK) {
         // Very dark: continue from the gate band's gamma at the 0.26
-        // threshold (0.883) and steepen the lift from there, floored so
-        // a near-black photo is lifted hard but never solarized.
-        gamma = Math.max(0.68, 0.883 - 5 * (EXPO_VERY_DARK - mean));
+        // threshold (0.883) and steepen hard from there — slope 12 per
+        // unit of mean, floored at 0.57, so a near-black photo is lifted
+        // hard but never solarized. The bundled night portrait (mean
+        // 0.236) lands at gamma ≈ 0.60: measured on its lettering-free
+        // Grid panel, the cell mean rises +21.5% and the face zone
+        // +25.8% against the gentler curve that preceded it, while the
+        // shoulder below holds the panel's 99th-percentile brightness
+        // where it was (0.577 -> 0.573 — no blow-out).
+        gamma = Math.max(0.57, 0.883 - 12 * (EXPO_VERY_DARK - mean));
         shoulder = true;
       } else {
         const strength = (EXPO_GATE - mean) / EXPO_GATE;
@@ -490,7 +531,11 @@ function photoExposure(img) {
       const lut = new Uint8Array(256);
       for (let v = 0; v < 256; v++) {
         let t = Math.pow(v / 255, gamma);
-        if (shoulder && t > 0.82) t = 0.82 + 0.18 * Math.tanh((t - 0.82) / 0.18);
+        // Highlight shoulder: a tanh roll-off asymptoting at 0.96, not
+        // 1.0, so the stronger very-dark gamma cannot carry the
+        // brightest lit signs past where the gentler lift put them —
+        // their separation survives and nothing clips to a plateau.
+        if (shoulder && t > 0.8) t = 0.8 + 0.16 * Math.tanh((t - 0.8) / 0.16);
         lut[v] = Math.round(255 * t);
       }
       expo = { lut };
@@ -552,29 +597,54 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     // The halftone's gate map is measured on the photo as drawn, before
     // grading (and before the exposure lift) changes its detail.
     gate = grade.halftone ? halftoneGateMap(px, cw, ch) : null;
-    for (let i = 0; i < px.length; i += 4) {
-      let r = px[i];
-      let g = px[i + 1];
-      let b = px[i + 2];
-      if (expo.lut) {
-        r = expo.lut[r];
-        g = expo.lut[g];
-        b = expo.lut[b];
+    // Ordered dithering (grades that carry `dither`: Noir). The posterized
+    // lookup is taken at a luminance perturbed by the pixel's Bayer
+    // threshold, scaled by the grade's amplitude in tonal steps: inside a
+    // flat plateau, pixels whose threshold carries them over the step edge
+    // take the neighbouring step, in Bayer proportion — the plateau
+    // breaks into a fine print texture whose spatial average is the tone
+    // the smooth ramp would have given, so gradation returns to faces
+    // without surrendering the posterized steps anywhere. The smooth
+    // (protect) lookup and the protect weight keep the unperturbed
+    // luminance, so deep shadows — where protection already renders the
+    // smooth ramp — stay smooth.
+    const ditherAmp = grade.dither
+      ? grade.dither * (255 / ((grade.steps ?? TONAL_STEPS) - 1))
+      : 0;
+    for (let y = 0; y < ch; y++) {
+      const rowBase = y * cw;
+      const bayerRow = BAYER8[y & 7];
+      for (let x = 0; x < cw; x++) {
+        const i = (rowBase + x) * 4;
+        let r = px[i];
+        let g = px[i + 1];
+        let b = px[i + 2];
+        if (expo.lut) {
+          r = expo.lut[r];
+          g = expo.lut[g];
+          b = expo.lut[b];
+        }
+        const lum = (r * 77 + g * 150 + b * 29) >> 8;
+        let o = lum * 3;
+        if (ditherAmp) {
+          const dl = Math.max(0, Math.min(255,
+            Math.round(lum + ((bayerRow[x & 7] + 0.5) / 64 - 0.5) * ditherAmp)));
+          o = dl * 3;
+        }
+        let tr = lut[o];
+        let tg = lut[o + 1];
+        let tb = lut[o + 2];
+        if (smoothLut) {
+          const so = lum * 3;
+          const wgt = smoothstep(protect[0], protect[1], lum / 255);
+          tr = smoothLut[so] + (tr - smoothLut[so]) * wgt;
+          tg = smoothLut[so + 1] + (tg - smoothLut[so + 1]) * wgt;
+          tb = smoothLut[so + 2] + (tb - smoothLut[so + 2]) * wgt;
+        }
+        px[i] = r + (tr - r) * mix;
+        px[i + 1] = g + (tg - g) * mix;
+        px[i + 2] = b + (tb - b) * mix;
       }
-      const lum = (r * 77 + g * 150 + b * 29) >> 8;
-      const o = lum * 3;
-      let tr = lut[o];
-      let tg = lut[o + 1];
-      let tb = lut[o + 2];
-      if (smoothLut) {
-        const wgt = smoothstep(protect[0], protect[1], lum / 255);
-        tr = smoothLut[o] + (tr - smoothLut[o]) * wgt;
-        tg = smoothLut[o + 1] + (tg - smoothLut[o + 1]) * wgt;
-        tb = smoothLut[o + 2] + (tb - smoothLut[o + 2]) * wgt;
-      }
-      px[i] = r + (tr - r) * mix;
-      px[i + 1] = g + (tg - g) * mix;
-      px[i + 2] = b + (tb - b) * mix;
     }
     ctx.putImageData(data, 0, 0);
     graded = px;
@@ -804,9 +874,7 @@ function fitFont(ctx, text, maxW, startSize, family) {
 // rimmed by one thin complementary line.
 const TITLE_STOPS = [[0, '#3060ce'], [0.38, '#913bc2'], [0.68, '#ff5395'], [1, '#ff944c']];
 
-function drawTitle(ctx, w, h, title, noir, scale = 1) {
-  const size = fitFont(ctx, title, w * 0.94, h * 0.17 * scale, 'Anton, "Arial Black", sans-serif');
-  const baseline = h * 0.865;
+function drawTitle(ctx, w, title, noir, size, baseline) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
@@ -886,7 +954,14 @@ export function drawPoster(canvas, state) {
   const h = canvas.height;
   const grade = GRADES[state.grade] ?? GRADES.sunset;
   const noir = state.grade === 'noir';
-  const { shapes } = panelShapes(w, h, state.layout);
+  const mosaic = state.layout === 'mosaic';
+  // Mosaic's lettering never overlays the grid: the nine cells occupy the
+  // top ~78% of the canvas and the title + tagline sit in a title band of
+  // their own below the grid (filled after the panels, before the
+  // gutters), so all nine panels stay 100% visible — bottom row included
+  // — in the editor and in every export.
+  const gridH = mosaic ? Math.round(h * 0.78) : h;
+  const { shapes } = panelShapes(w, gridH, state.layout);
 
   // Sky base (shows through only where panels do not cover).
   const sky = ctx.createLinearGradient(0, 0, 0, h);
@@ -932,6 +1007,16 @@ export function drawPoster(canvas, state) {
       ctx.stroke();
     }
   };
+  // The Mosaic title band: a deep strip in the grade's scrim colour below
+  // the grid. It is filled before the gutter pass, so the grid's bottom
+  // gutter line and pinstripe print cleanly across the band's top edge.
+  if (mosaic) {
+    const bg = ctx.createLinearGradient(0, gridH, 0, h);
+    bg.addColorStop(0, `rgba(${grade.scrim}, 0.94)`);
+    bg.addColorStop(1, `rgba(${grade.scrim}, 1)`);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, gridH, w, h - gridH);
+  }
   strokeGutters();
 
   // Decor: slit sun on the sea panel's horizon (see sunAnchor — never
@@ -953,27 +1038,44 @@ export function drawPoster(canvas, state) {
     strokeGutters();
   }
   const palmColor = 'rgba(10, 4, 18, 0.88)';
-  drawPalm(ctx, w * 0.02, h * 0.99, h * 0.3, false, palmColor);
-  drawPalm(ctx, w * 0.99, h * 1.0, h * 0.25, true, palmColor);
+  if (mosaic) {
+    // Palms frame the title band's lower corners, sized to the band, so
+    // they never reach up into the grid's bottom row.
+    const bandH = h - gridH;
+    drawPalm(ctx, w * 0.02, h * 0.995, bandH * 0.92, false, palmColor);
+    drawPalm(ctx, w * 0.99, h * 1.0, bandH * 0.78, true, palmColor);
+  } else {
+    drawPalm(ctx, w * 0.02, h * 0.99, h * 0.3, false, palmColor);
+    drawPalm(ctx, w * 0.99, h * 1.0, h * 0.25, true, palmColor);
+  }
 
   // Print finishing over the composite, before the lettering.
   applyFinishing(ctx, w, h);
 
-  // Scrim so the lettering reads over any photo. Mosaic's nine cells are
-  // the layout's whole argument, so its scrim starts lower still and its
-  // lettering block is scaled down further — all nine cells, bottom row
-  // included, stay readable as panels instead of drowning under the title.
-  const mosaic = state.layout === 'mosaic';
-  const scrimTop = mosaic ? 0.7 : 0.52;
-  const scrim = ctx.createLinearGradient(0, h * scrimTop, 0, h);
-  scrim.addColorStop(0, `rgba(${grade.scrim}, 0)`);
-  scrim.addColorStop(1, `rgba(${grade.scrim}, 0.82)`);
-  ctx.fillStyle = scrim;
-  ctx.fillRect(0, h * scrimTop, w, h * (1 - scrimTop));
-
   // Lettering: gradient title with a double outline, neon script tagline.
   const title = (state.title || '').trim().toUpperCase();
-  const titleBox = title ? drawTitle(ctx, w, h, title, noir, mosaic ? 0.65 : 1) : null;
+  let titleBox = null;
+  if (mosaic) {
+    // In the band: the title is sized to the band's height and the pair
+    // (title + tagline) is centred inside the strip — no scrim over the
+    // panels is needed, the band is the scrim.
+    const bandH = h - gridH;
+    if (title) {
+      const size = fitFont(ctx, title, w * 0.94, bandH * 0.46, 'Anton, "Arial Black", sans-serif');
+      titleBox = drawTitle(ctx, w, title, noir, size, gridH + bandH * 0.55);
+    }
+  } else {
+    // Scrim so the lettering reads over any photo.
+    const scrim = ctx.createLinearGradient(0, h * 0.52, 0, h);
+    scrim.addColorStop(0, `rgba(${grade.scrim}, 0)`);
+    scrim.addColorStop(1, `rgba(${grade.scrim}, 0.82)`);
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0, h * 0.52, w, h * 0.48);
+    if (title) {
+      const size = fitFont(ctx, title, w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
+      titleBox = drawTitle(ctx, w, title, noir, size, h * 0.865);
+    }
+  }
   const tag = (state.tagline || '').trim();
   if (tag) drawTagline(ctx, w, h, tag, noir, titleBox);
 
