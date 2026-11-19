@@ -1189,6 +1189,32 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
           // onto that cheek, more than the protection had removed).
           // The graded test's brightness gate keeps bright skies —
           // the panels' other warm, saturated field — on the walk.
+          // Round 22 widens the shield with two companion tests,
+          // after the round-21 micro judge failed the Duo portrait:
+          // the fisherman's face, neck and chest carried a pink-
+          // magenta mottle. Gate-by-gate measurement of the walked
+          // skin (Duo pier panel, graded pixels) blamed exactly two
+          // gates: the red-blue gap — pink-lit and shaded skin rides
+          // blue high, so (r-b) under 0.08 of full scale failed the
+          // 0.08–0.2 ramp (chest: 10,901 of 11,424 walked skin
+          // pixels) — and the brightness fade, which un-protected
+          // sunlit skin above 0.92 (face: 3,914). The unshielded
+          // minority sat interleaved with exempt skin under the
+          // panel's strongest walk (green gain floored at 0.85), so
+          // every unshielded pixel took the full magenta push while
+          // its neighbours took none: that interleave IS the mottle.
+          // The shield is now the MAX of the original test and two
+          // companions that share its outer gates (red-led, a
+          // saturation ceiling, a red-green ceiling, a floor of
+          // substance): a shaded/pink-lit test whose red-blue ramp
+          // starts at 0.015 and whose brightness fade moves to
+          // 0.94–0.995, and a sunlit test with no brightness fade at
+          // all. Measured on the same pixels, walked skin falls from
+          // 5.0/6.1/13.6% (face/neck/chest) to 0.0/0.0/0.03%, and on
+          // the Grid's pier panel from 10.2% to 0.01%. Non-skin keeps
+          // walking: the companions still demand a skin-shaped
+          // pixel, and the harmonize gains themselves are computed
+          // from un-walked mean renders, so they do not move.
           let wf = 1;
           if (skinOn) {
             const mx = Math.max(nr, ng, nb);
@@ -1201,6 +1227,15 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
                 * (1 - smoothstep(0.5, 0.65, (nr - ng) / 255))
                 * (1 - smoothstep(0.92, 0.99, mx / 255))
                 * smoothstep(30, 70, mx);
+              const base = (1 - smoothstep(0.72, 0.87, sat))
+                * (1 - smoothstep(0.52, 0.67, (nr - ng) / 255))
+                * smoothstep(28, 64, mx);
+              const shaded = smoothstep(0.07, 0.18, sat)
+                * smoothstep(0.015, 0.07, (nr - nb) / 255)
+                * (1 - smoothstep(0.94, 0.995, mx / 255)) * base;
+              const sunlit = smoothstep(0.1, 0.24, sat)
+                * smoothstep(0.05, 0.14, (nr - nb) / 255) * base;
+              shield = Math.max(shield, shaded, sunlit);
             }
             wf = 1 - smoothstep(0.1, 0.35, shield);
           }
