@@ -1670,9 +1670,13 @@ function drawSeal(ctx, cx, cy, r, rot) {
 }
 
 /** The review row: five gold stars and our invented pull-quote on a
- *  soft dark pill — the line a real one-sheet carries from its best
+ *  dark pill — the line a real one-sheet carries from its best
  *  review. Centred on the canvas by default; with `spot.right` set it
- *  is right-aligned to that x instead (the Grid's hero-sky placement). */
+ *  is right-aligned to that x instead (the Grid's hero-sky placement).
+ *  The pill is translucent except where `spot.opaque` is set: the
+ *  landscape Grid's hero sky has no clean window at the pill's size
+ *  (round 15 pixel scan below), so that one pill is filled solid —
+ *  nothing behind it can show through its body. */
 function drawRatingRow(ctx, w, h, cy, spot = null) {
   const starR = h * 0.0155;
   const quote = `${REVIEW_QUOTE} — ${REVIEW_SOURCE}`;
@@ -1687,7 +1691,7 @@ function drawRatingRow(ctx, w, h, cy, spot = null) {
     : (w - totalW) / 2;
   const pillH = h * 0.058;
   rr(ctx, x0 - padX, cy - pillH / 2, totalW + padX * 2, pillH, pillH / 2);
-  ctx.fillStyle = 'rgba(10, 4, 20, 0.62)';
+  ctx.fillStyle = spot && spot.opaque ? '#0a0414' : 'rgba(10, 4, 20, 0.62)';
   ctx.fill();
   ctx.lineWidth = Math.max(1.5, h * 0.0016);
   ctx.strokeStyle = 'rgba(255, 243, 214, 0.4)';
@@ -1936,12 +1940,20 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
   if (state.layout !== 'duo') {
     if (state.layout === 'grid' && w > h) {
       // The review row rides in the hero panel's sky, right-aligned
-      // just inside the hero's right edge: over sky and palm crowns,
-      // clear of the heroine's hair (the reframed hero sits lower in
-      // her panel), clear of the gutter and of every satellite — the
-      // centred row it replaces floated across the gutter and buried
-      // the night panel's face and the hero's hair at once.
-      drawRatingRow(ctx, w, h, h * 0.045, { right: shapes[0].x + shapes[0].w - w * 0.018 });
+      // just inside the hero's right edge: clear of the heroine's
+      // hair (the reframed hero sits lower in her panel), clear of
+      // the gutter and of every satellite — the centred row it
+      // replaces floated across the gutter and buried the night
+      // panel's face and the hero's hair at once. It cannot claim
+      // dead space behind it, though: a round-15 pixel scan of the
+      // undressed hero panel found NO clean window at the pill's
+      // size anywhere in its sky (4,253 windows at full size, best
+      // still 10.0% palm-and-hair dark; shrinking to 0.85 still
+      // leaves 6.0%) — crowns, trunks and her hair cross every
+      // placement. So this pill alone is filled OPAQUE: the crowns
+      // behind it stay behind it, and nothing silhouettes through
+      // its body the way the translucent fill let them.
+      drawRatingRow(ctx, w, h, h * 0.045, { right: shapes[0].x + shapes[0].w - w * 0.018, opaque: true });
     } else {
       const cy = titleBox
         ? titleBox.baseline - titleBox.size - h * 0.042
