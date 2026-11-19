@@ -3,7 +3,8 @@
 //   ?shot=cover&layout=trio&grade=noir&size=1920x1080 — the exported PNG itself,
 //   shown full-bleed so the screenshot is the PNG the app wrote, scaled down.
 // `photo` picks the sample for panel 1 (samples/<photo>.jpg), `photo2` for
-// panel 2. window.__shotReady is set once the scene is painted.
+// panel 2, `photo3` for panel 3; panels 4-5 reuse photos 1-2 with a tighter
+// crop. window.__shotReady is set once the scene is painted.
 import { GRADES, LAYOUTS, SIZES } from './poster.js';
 
 export async function runShot(shot, query, helpers) {
@@ -15,14 +16,23 @@ export async function runShot(shot, query, helpers) {
   if (query.get('title')) state.title = query.get('title');
   if (query.get('tagline')) state.tagline = query.get('tagline');
 
-  // Load the samples into the panels (panel 2 may take its own sample).
+  // Load the samples into the panels: three distinct photos up front, then
+  // re-crops — so a Trio shows three different photos, a Grid five panels.
   const first = `samples/${query.get('photo') ?? 'boulevard'}.jpg`;
   const second = `samples/${query.get('photo2') ?? 'pier'}.jpg`;
-  const [imgA, imgB] = await Promise.all([loadImage(first), loadImage(second)]);
-  state.panels[0].img = imgA;
-  state.panels[0].src = first;
-  if (state.panels[1]) { state.panels[1].img = imgB; state.panels[1].src = second; }
-  if (state.panels[2]) { state.panels[2].img = imgA; state.panels[2].src = first; }
+  const third = `samples/${query.get('photo3') ?? 'convertible'}.jpg`;
+  const [imgA, imgB, imgC] = await Promise.all([loadImage(first), loadImage(second), loadImage(third)]);
+  const put = (i, src, img, framing) => {
+    if (!state.panels[i]) return;
+    state.panels[i].img = img;
+    state.panels[i].src = src;
+    if (framing) Object.assign(state.panels[i], framing);
+  };
+  put(0, first, imgA);
+  put(1, second, imgB);
+  put(2, third, imgC);
+  put(3, first, imgA, { zoom: 1.35, ox: 0.3, oy: 0.4 });
+  put(4, second, imgB, { zoom: 1.3, ox: -0.3, oy: 0.45 });
 
   // Keep the editor controls in sync with the scene's choices.
   document.querySelectorAll('[data-layout]').forEach((b) => b.classList.toggle('on', b.dataset.layout === state.layout));
@@ -31,7 +41,14 @@ export async function runShot(shot, query, helpers) {
   document.getElementById('title').value = state.title;
   document.getElementById('tagline').value = state.tagline;
 
-  await document.fonts.ready;
+  // Wait for the display faces explicitly: fonts.ready alone can resolve
+  // before an unused @font-face (Yellowtail) has actually been fetched.
+  await Promise.all([
+    document.fonts.load('80px Anton'),
+    document.fonts.load('40px Yellowtail'),
+    document.fonts.load('40px "Bebas Neue"'),
+    document.fonts.ready,
+  ]);
   redraw();
 
   if (shot === 'cover') {

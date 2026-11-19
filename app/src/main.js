@@ -1,7 +1,7 @@
 // VICE COVER editor wiring: photo per panel, crop by drag, zoom, caption,
 // layout / grade / size pickers, and PNG export at the chosen post size.
 // Photos are read on this machine only (object URLs / bundled samples).
-import { drawPoster, renderExport, GRADES, LAYOUTS, SIZES } from './poster.js';
+import { drawPoster, renderExport, panelShapes, GRADES, LAYOUTS, SIZES } from './poster.js';
 import { runShot } from './shots.js';
 
 const canvas = document.getElementById('stage');
@@ -12,7 +12,7 @@ const zoomInput = document.getElementById('zoom');
 const zoomVal = document.getElementById('zoomVal');
 const panelLabel = document.getElementById('panelLabel');
 
-const SAMPLES = ['samples/boulevard.jpg', 'samples/pier.jpg'];
+const SAMPLES = ['samples/boulevard.jpg', 'samples/pier.jpg', 'samples/convertible.jpg'];
 
 const state = {
   layout: 'trio',
@@ -24,7 +24,9 @@ const state = {
   panels: [
     { src: SAMPLES[0], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
     { src: SAMPLES[1], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
-    { src: SAMPLES[0], img: null, zoom: 1.25, ox: 0, oy: 0.55 },
+    { src: SAMPLES[2], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
+    { src: SAMPLES[0], img: null, zoom: 1.35, ox: 0.3, oy: 0.4 },
+    { src: SAMPLES[1], img: null, zoom: 1.3, ox: -0.3, oy: 0.45 },
   ],
 };
 
@@ -179,9 +181,11 @@ canvas.addEventListener('pointermove', (e) => {
   if (!drag) return;
   const r = canvas.getBoundingClientRect();
   const p = state.panels[state.active];
-  const pw = r.width / LAYOUTS[state.layout].panels;
+  const shape = panelShapes(canvas.width, canvas.height, state.layout).shapes[state.active];
+  const pw = (shape ? shape.w / canvas.width : 1 / LAYOUTS[state.layout].panels) * r.width;
+  const ph = (shape ? shape.h / canvas.height : 1) * r.height;
   p.ox += ((e.clientX - drag.x) / pw) * 1.6;
-  p.oy += ((e.clientY - drag.y) / r.height) * 1.6;
+  p.oy += ((e.clientY - drag.y) / ph) * 1.6;
   p.ox = Math.max(-1, Math.min(1, p.ox));
   p.oy = Math.max(-1, Math.min(1, p.oy));
   drag = { x: e.clientX, y: e.clientY };
@@ -196,17 +200,34 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // Export: render at full post size and download the PNG.
-document.getElementById('export').addEventListener('click', () => {
+function download(canvasOut, name) {
+  return new Promise((resolve) => {
+    canvasOut.toBlob((blob) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      resolve();
+    }, 'image/png');
+  });
+}
+
+document.getElementById('export').addEventListener('click', async () => {
   const [w, h] = SIZES[state.size];
-  const out = renderExport(state);
-  out.toBlob((blob) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `vice-cover-${w}x${h}.png`;
-    a.click();
-    setStatus(`Saved vice-cover-${w}x${h}.png — ${w} x ${h}.`);
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }, 'image/png');
+  await download(renderExport(state), `vice-cover-${w}x${h}.png`);
+  setStatus(`Saved vice-cover-${w}x${h}.png — ${w} x ${h}.`);
+});
+
+// Export all sizes: one PNG per post size, from the current poster state.
+document.getElementById('exportAll').addEventListener('click', async () => {
+  const keys = Object.keys(SIZES);
+  for (let i = 0; i < keys.length; i++) {
+    const [w, h] = SIZES[keys[i]];
+    await download(renderExport(state, keys[i]), `vice-cover-${w}x${h}.png`);
+    if (i < keys.length - 1) await new Promise((r) => setTimeout(r, 350));
+  }
+  setStatus('Saved all three post sizes — 1080 x 1080, 1080 x 1350, 1920 x 1080.');
 });
 
 /** Export the current poster as a PNG blob (used by the cover screenshot scene). */
@@ -222,7 +243,11 @@ if (shot) {
   runShot(shot, params, { state, loadImage, redraw, exportPNG, markReady, setStatus });
 } else {
   loadSamples()
-    .then(() => { redraw(); return document.fonts.ready; })
+    .then(() => Promise.all([
+      document.fonts.load('80px Anton'),
+      document.fonts.load('40px Yellowtail'),
+      document.fonts.ready,
+    ]))
     .then(() => redraw())
     .catch(() => redraw());
 }

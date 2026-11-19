@@ -8,9 +8,10 @@
 // make.fun library (vendor/makefun-app.ts, unchanged).
 //
 // The app itself: pick a photo per panel, crop it by dragging, pick a layout
-// (Vice Trio / Split Duo / Solo Hero), a colour grade (Sunset, Neon Nights,
-// Palm Gold, Noir) and a post size, type a title and a tagline, and export a
-// PNG. Its two sample photos (app/samples/) were made for make.fun with an
+// (Vice Trio / Split Duo / Solo Hero / Cover Grid), a colour grade (Sunset,
+// Neon Nights, Palm Gold, Noir — all gradient-mapped) and a post size, type
+// a title and a tagline, and export a PNG (one size, or all three at once).
+// Its three sample photos (app/samples/) were made for make.fun with an
 // image model and are free to use.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
