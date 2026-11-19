@@ -37,7 +37,16 @@ export async function runShot(shot, query, helpers) {
     state.panels[i].src = src;
     if (framing) Object.assign(state.panels[i], framing);
   };
-  put(0, first, imgA);
+  // The Blockbuster Grid showcase frames its hero tighter and lower:
+  // zoomed in and favouring the top of the photo, the heroine sits
+  // deeper in her panel, which opens a clean band of sky across the
+  // panel's top for the review row — clear of her hair — while her
+  // face stays large. Only this scene is reframed; every other shot
+  // keeps the renderer's default framing exactly.
+  const heroFrame = (state.layout === 'grid' && state.grade === 'blockbuster')
+    ? { zoom: 1.22, oy: 0.9 }
+    : undefined;
+  put(0, first, imgA, heroFrame);
   put(1, second, imgB);
   put(2, third, imgC);
   put(3, fourth, imgD);

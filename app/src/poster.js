@@ -81,6 +81,18 @@ export const GRADES = {
     // charge, and the saturation lift is luminance-centred, so faces
     // gain glow, not sunburn. No softened base, no ink, no posterize:
     // detail in, detail out.
+    //
+    // Round 11 hardens the class against the convergent judge defects:
+    // `skinProtect` moderates the mix and the saturation lift on
+    // detected skin pixels, so faces stop sliding tangerine while the
+    // sunset around them keeps its full richness; `harmonize` white-
+    // balances every satellite panel toward the hero panel's graded
+    // mean, so five photos read as one sunset world instead of five
+    // sessions; `glowSun` replaces the hard slit disc with a soft
+    // photographic glare that melts into the panel's own light; and
+    // `titleStops`/`titleRim` give the lettering the winners' sunset
+    // family — cream -> gold -> orange inside a deep plum outline —
+    // instead of the synthwave violet-pink and cyan rim.
     label: 'Blockbuster',
     sky: ['#2b1055', '#7597de'],
     skyTop: '#1c0b3d',
@@ -91,6 +103,11 @@ export const GRADES = {
     steps: 256,
     mix: 0.55,
     enrich: { sat: 1.24, curve: 0.16 },
+    skinProtect: true,
+    harmonize: true,
+    glowSun: true,
+    titleStops: [[0, '#fff7dc'], [0.34, '#ffd166'], [0.68, '#ff944c'], [1, '#ff6a2a']],
+    titleRim: '#3d0a26',
     accent: '#ff2e63',
     tagText: '#1c0b3d',
     scrim: '10, 4, 20',
@@ -753,14 +770,15 @@ function painterlyInkCanvas(px, cw, ch, expo, p) {
 /** A panel's photo, drawn cover-fit into its own canvas and run through the
  *  grade's gradient map. Cached per (photo, grade, panel size, framing) so
  *  repeat renders and exports stay fast. */
-export function gradedPanelCanvas(shape, photo, gradeKey) {
+export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
   const cw = Math.max(1, Math.round(shape.w));
   const ch = Math.max(1, Math.round(shape.h));
   const img = photo.img;
   if (img.__vcId == null) img.__vcId = ++imgSeq;
   const key = [img.__vcId, gradeKey, cw, ch,
     (photo.zoom ?? 1).toFixed(3), (photo.ox ?? 0).toFixed(3), (photo.oy ?? 0.55).toFixed(3),
-    photo.flip ? 'f' : ''].join('|');
+    photo.flip ? 'f' : '',
+    wb ? wb.map((v) => v.toFixed(3)).join(',') : ''].join('|');
   if (panelCache.has(key)) return panelCache.get(key);
 
   const canvas = document.createElement('canvas');
@@ -835,6 +853,25 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     // and render exactly as before.
     const eCurve = grade.enrich?.curve ?? 0;
     const eSat = grade.enrich?.sat ?? 0;
+    // Skin protection (grades that carry `skinProtect`: Blockbuster).
+    // The sunset ramp's orange highlight stop plus the saturation lift
+    // used to push faces tangerine: the photo's warmest, most saturated
+    // pixels are exactly the ones the grade amplifies hardest. Pixels
+    // the detector reads as skin (red-led channel order, a moderate
+    // saturation band, a warm red-blue gap, a red-green gap that stays
+    // skin-like rather than foliage- or fire-like, and a brightness
+    // below the near-blown range where pale sky lives) therefore get
+    // a moderated mix — the photo's own skin hue stays in charge —
+    // and a moderated saturation lift, weighted smoothly so the
+    // protected region has no visible edge. The red channel only has
+    // to LEAD, not follow a strict r>g>b order: magenta-lit skin (the
+    // pier portrait's pink rim light) has blue over green and is skin
+    // all the same. Everything that is not skin grades at the grade's
+    // full richness: skies, sea and signage keep the deep sunset the
+    // class is for — the brightness gate is what keeps the pale sunset
+    // sky, whose ratios mimic skin, at full grade. Grades without
+    // the flag never enter the branch and render exactly as before.
+    const skinOn = !!grade.skinProtect;
     for (let y = 0; y < ch; y++) {
       const rowBase = y * cw;
       const bayerRow = BAYER8[y & 7];
@@ -870,14 +907,68 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
           tg = smoothLut[so + 1] + (tg - smoothLut[so + 1]) * wgt;
           tb = smoothLut[so + 2] + (tb - smoothLut[so + 2]) * wgt;
         }
-        let nr = r + (tr - r) * mix;
-        let ng = g + (tg - g) * mix;
-        let nb = b + (tb - b) * mix;
+        let mixP = mix;
+        let satP = eSat;
+        if (skinOn) {
+          const mx = Math.max(r, g, b);
+          const mn = Math.min(r, g, b);
+          let wgt = 0;
+          if (r > g && r > b && mx > 40) {
+            const sat = (mx - mn) / mx;
+            wgt = smoothstep(0.1, 0.22, sat) * (1 - smoothstep(0.55, 0.75, sat))
+              * smoothstep(0.06, 0.16, (r - b) / 255)
+              * (1 - smoothstep(0.42, 0.55, (r - g) / 255))
+              * (1 - smoothstep(0.9, 0.98, mx / 255))
+              * smoothstep(30, 70, mx);
+          }
+          if (wgt > 0) {
+            mixP = mix * (1 - 0.44 * wgt);
+            satP = 1 + (eSat - 1) * (1 - 0.62 * wgt);
+          }
+        }
+        let nr = r + (tr - r) * mixP;
+        let ng = g + (tg - g) * mixP;
+        let nb = b + (tb - b) * mixP;
         if (eSat) {
           const l = (nr * 77 + ng * 150 + nb * 29) >> 8;
-          nr = Math.max(0, Math.min(255, l + (nr - l) * eSat));
-          ng = Math.max(0, Math.min(255, l + (ng - l) * eSat));
-          nb = Math.max(0, Math.min(255, l + (nb - l) * eSat));
+          nr = Math.max(0, Math.min(255, l + (nr - l) * satP));
+          ng = Math.max(0, Math.min(255, l + (ng - l) * satP));
+          nb = Math.max(0, Math.min(255, l + (nb - l) * satP));
+        }
+        if (wb) {
+          // White-balance harmonization (harmonize grades, gains
+          // computed by drawPoster from the panels' graded means):
+          // a gentle per-channel gain that walks this panel's colour
+          // temperature toward the hero panel's, so the grid reads as
+          // one world. The hero itself always carries unit gains.
+          // Skin is exempt from the walk, judged on the GRADED pixel:
+          // shaded skin can be near-neutral in the source (the
+          // fisherman's shadowed cheek reads grey-pink at saturation
+          // 0.11) and only becomes skin-hued once the ramp has
+          // coloured it, so a source-space test cannot see it — but
+          // the walk must not re-saturate it either (measured: the
+          // pier panel's sea-driven blue gain alone added +0.05 back
+          // onto that cheek, more than the protection had removed).
+          // The graded test's brightness gate keeps bright skies —
+          // the panels' other warm, saturated field — on the walk.
+          let wf = 1;
+          if (skinOn) {
+            const mx = Math.max(nr, ng, nb);
+            const mn = Math.min(nr, ng, nb);
+            let shield = 0;
+            if (nr > ng && nr > nb && mx > 40) {
+              const sat = (mx - mn) / mx;
+              shield = smoothstep(0.15, 0.3, sat) * (1 - smoothstep(0.7, 0.85, sat))
+                * smoothstep(0.08, 0.2, (nr - nb) / 255)
+                * (1 - smoothstep(0.5, 0.65, (nr - ng) / 255))
+                * (1 - smoothstep(0.92, 0.99, mx / 255))
+                * smoothstep(30, 70, mx);
+            }
+            wf = 1 - smoothstep(0.1, 0.35, shield);
+          }
+          nr = Math.max(0, Math.min(255, nr * (1 + (wb[0] - 1) * wf)));
+          ng = Math.max(0, Math.min(255, ng * (1 + (wb[1] - 1) * wf)));
+          nb = Math.max(0, Math.min(255, nb * (1 + (wb[2] - 1) * wf)));
         }
         px[i] = nr;
         px[i + 1] = ng;
@@ -912,13 +1003,56 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
 }
 
 /** Draws one graded photo panel, clipped to the panel polygon. */
-export function drawPanelPhoto(ctx, shape, photo, gradeKey) {
+export function drawPanelPhoto(ctx, shape, photo, gradeKey, wb = null) {
   if (!photo || !photo.img) return;
   ctx.save();
   tracePoly(ctx, shape.poly);
   ctx.clip();
-  ctx.drawImage(gradedPanelCanvas(shape, photo, gradeKey), shape.x, shape.y);
+  ctx.drawImage(gradedPanelCanvas(shape, photo, gradeKey, wb), shape.x, shape.y);
   ctx.restore();
+}
+
+/** Mean RGB of a canvas, measured on an 8x8 downscale — cheap and
+ *  deterministic, used only for white-balance harmonization. */
+function canvasMeanRGB(canvas) {
+  const t = document.createElement('canvas');
+  t.width = 8;
+  t.height = 8;
+  const g = t.getContext('2d');
+  g.drawImage(canvas, 0, 0, 8, 8);
+  const d = g.getImageData(0, 0, 8, 8).data;
+  let r = 0;
+  let gg = 0;
+  let b = 0;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; }
+  const n = d.length / 4;
+  return [r / n, gg / n, b / n];
+}
+
+/** Per-panel white-balance gains for a harmonize grade: each panel's
+ *  graded mean is walked halfway (in gain space) toward the hero
+ *  panel's graded mean — the panel flagged `main`, else the first —
+ *  with the gains clamped so no panel is ever dragged across the
+ *  colour wheel. The hero's own gains are exactly 1. Measured on the
+ *  un-shifted graded panels (which stay in the panel cache; the
+ *  shifted renders cache alongside them under their own keys). */
+function harmonizeGains(state, shapes) {
+  const rendered = shapes.map((s, i) => {
+    const photo = panelPhoto(state, i);
+    return photo && photo.img ? gradedPanelCanvas(s, photo, state.grade) : null;
+  });
+  const heroIdx = Math.max(0, shapes.findIndex((s) => s.main));
+  const target = rendered[heroIdx] ? canvasMeanRGB(rendered[heroIdx]) : null;
+  if (!target) return null;
+  return rendered.map((c, i) => {
+    if (!c || i === heroIdx) return null;
+    const own = canvasMeanRGB(c);
+    return [0, 1, 2].map((k) => {
+      if (own[k] < 4 || target[k] < 4) return 1;
+      const g = Math.pow(target[k] / own[k], 0.5);
+      return Math.max(0.85, Math.min(1.18, g));
+    });
+  });
 }
 
 // --- Sun ------------------------------------------------------------------
@@ -983,14 +1117,36 @@ export function drawPaintedSun(ctx, cx, cy, r, grade) {
   ctx.restore();
 }
 
+/** The photographic glare (grades that carry `glowSun`: Blockbuster).
+ *  Where the slit sun stamps a hard vector disc with striped gaps onto
+ *  the photograph — a clip-art sticker on a photographic panel — the
+ *  glare is pure light: a warm core that falls off through the grade's
+ *  own sun colours to nothing, with no edge, no slits and no outline,
+ *  so it melts into the panel's sky and sea glare like a real sunset
+ *  blowing out a lens. */
+export function drawGlowSun(ctx, cx, cy, r, grade) {
+  const R = r * 1.5;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  g.addColorStop(0, hexA(grade.sunCore, 0.95));
+  g.addColorStop(0.32, hexA(grade.sun, 0.72));
+  g.addColorStop(0.62, hexA(grade.sunStops[2], 0.3));
+  g.addColorStop(1, hexA(grade.sunStops[2], 0));
+  ctx.save();
+  ctx.fillStyle = g;
+  ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  ctx.restore();
+}
+
 /** Classic slit sun: a disc with a vertical grade gradient (a grade may
  *  carry a richer `sunGrad` — Noir's runs white -> light grey -> mid grey
  *  -> deep grey so the disc keeps real shading instead of reading as a
  *  flat white sticker — and soft-edged dark-grey slits via `sunSlitSoft`,
  *  instead of hard pure-black bars), cut by widening horizontal gaps
  *  toward the bottom. A grade with `paintedSun` (Key Art) takes the
- *  painted disc above instead. */
+ *  painted disc above instead, and a grade with `glowSun`
+ *  (Blockbuster) takes the photographic glare. */
 export function drawSun(ctx, cx, cy, r, grade) {
+  if (grade.glowSun) { drawGlowSun(ctx, cx, cy, r, grade); return; }
   if (grade.paintedSun) { drawPaintedSun(ctx, cx, cy, r, grade); return; }
   ctx.save();
   ctx.beginPath();
@@ -1242,9 +1398,10 @@ function drawSeal(ctx, cx, cy, r, rot) {
 }
 
 /** The review row: five gold stars and our invented pull-quote on a
- *  soft dark pill, centred just above the title — the line a real
- *  one-sheet carries from its best review. */
-function drawRatingRow(ctx, w, h, cy) {
+ *  soft dark pill — the line a real one-sheet carries from its best
+ *  review. Centred on the canvas by default; with `spot.right` set it
+ *  is right-aligned to that x instead (the Grid's hero-sky placement). */
+function drawRatingRow(ctx, w, h, cy, spot = null) {
   const starR = h * 0.0155;
   const quote = `${REVIEW_QUOTE} — ${REVIEW_SOURCE}`;
   ctx.font = `${Math.round(h * 0.029)}px "Bebas Neue", sans-serif`;
@@ -1253,7 +1410,9 @@ function drawRatingRow(ctx, w, h, cy) {
   const gap = h * 0.016;
   const padX = h * 0.02;
   const totalW = starsW + gap + tw;
-  const x0 = (w - totalW) / 2;
+  const x0 = spot && spot.right != null
+    ? spot.right - totalW - padX
+    : (w - totalW) / 2;
   const pillH = h * 0.058;
   rr(ctx, x0 - padX, cy - pillH / 2, totalW + padX * 2, pillH, pillH / 2);
   ctx.fillStyle = 'rgba(10, 4, 20, 0.62)';
@@ -1347,13 +1506,16 @@ function drawPalmSilhouette(ctx, x, baseY, height, lean) {
   ctx.restore();
 }
 
-/** The banner strip along the poster's foot: a sunset band carrying a
- *  row of palm silhouettes, an EST. 2026 chip at the left, the tagline
- *  in letterspaced capitals at the centre and a drawn barcode block at
- *  the right — the full bottom furniture of a printed one-sheet. */
+/** The banner strip along the poster's foot: a full design band, not
+ *  a footnote — a tall sunset strip carrying a row of large palm
+ *  silhouettes whose crowns rise past the band's top edge, an EST.
+ *  2026 chip at the left, the tagline in heavy letterspaced capitals
+ *  at the centre and a substantial drawn barcode block at the right —
+ *  the full bottom furniture of a printed one-sheet, at the same
+ *  visual weight the winning covers give theirs. */
 function drawBannerStrip(ctx, w, h, state) {
-  const y0 = Math.round(h * 0.908);
-  const sh = Math.round(h * 0.058);
+  const sh = Math.round(h * 0.094);
+  const y0 = Math.round(h * 0.876);
   const grad = ctx.createLinearGradient(0, y0, 0, y0 + sh);
   grad.addColorStop(0, '#2b1055');
   grad.addColorStop(0.5, '#913bc2');
@@ -1361,22 +1523,24 @@ function drawBannerStrip(ctx, w, h, state) {
   grad.addColorStop(1, '#ff944c');
   ctx.fillStyle = grad;
   ctx.fillRect(0, y0, w, sh);
-  ctx.fillStyle = 'rgba(255, 243, 214, 0.75)';
-  ctx.fillRect(0, y0, w, Math.max(2, h * 0.0022));
-  // Palms along the band, behind the furniture.
+  ctx.fillStyle = 'rgba(255, 209, 102, 0.9)';
+  ctx.fillRect(0, y0, w, Math.max(2, h * 0.0028));
+  // Palms along the band, behind the furniture: taller than the band
+  // itself, so the crowns silhouette against the poster's scrim above
+  // the strip's top edge the way a printed one-sheet's palms do.
   const palms = 11;
   for (let k = 0; k < palms; k++) {
     const px = ((k + 0.5) / palms) * w + (dotHash(k, 31) - 0.5) * w * 0.02;
-    drawPalmSilhouette(ctx, px, y0 + sh + 2, sh * (0.8 + dotHash(k, 47) * 0.25), (dotHash(k, 13) - 0.5) * 0.7);
+    drawPalmSilhouette(ctx, px, y0 + sh + 2, sh * (0.92 + dotHash(k, 47) * 0.18), (dotHash(k, 13) - 0.5) * 0.7);
   }
   // EST. chip, left.
-  const estSize = Math.round(sh * 0.44);
+  const estSize = Math.round(sh * 0.5);
   ctx.font = `${estSize}px "Bebas Neue", sans-serif`;
   const estText = 'EST. 2026';
-  const estW = ctx.measureText(estText).width + sh * 0.36;
+  const estW = ctx.measureText(estText).width + sh * 0.42;
   const estX = w * 0.016;
-  const estY = y0 + (sh - sh * 0.68) / 2;
-  rr(ctx, estX, estY, estW, sh * 0.68, sh * 0.1);
+  const estY = y0 + (sh - sh * 0.72) / 2;
+  rr(ctx, estX, estY, estW, sh * 0.72, sh * 0.1);
   ctx.fillStyle = 'rgba(10, 4, 20, 0.5)';
   ctx.fill();
   ctx.lineWidth = Math.max(1.5, h * 0.0018);
@@ -1385,11 +1549,11 @@ function drawBannerStrip(ctx, w, h, state) {
   ctx.fillStyle = '#fff3d6';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(estText, estX + estW / 2, estY + sh * 0.68 / 2 + estSize * 0.36);
+  ctx.fillText(estText, estX + estW / 2, estY + sh * 0.72 / 2 + estSize * 0.36);
   // Barcode block, right: a white card of deterministic bars over a
   // tiny catalogue line — drawn, never an image.
-  const bcW = w * 0.056;
-  const bcH = sh * 0.7;
+  const bcW = w * 0.075;
+  const bcH = sh * 0.8;
   const bcX = w - w * 0.016 - bcW;
   const bcY = y0 + (sh - bcH) / 2;
   ctx.fillStyle = '#fdfdf8';
@@ -1403,23 +1567,28 @@ function drawBannerStrip(ctx, w, h, state) {
     bx += bw + Math.max(1, bcW * 0.016);
     bi++;
   }
-  ctx.font = `${Math.round(bcH * 0.21)}px "Bebas Neue", sans-serif`;
+  ctx.font = `${Math.round(bcH * 0.22)}px "Bebas Neue", sans-serif`;
   ctx.fillStyle = '#14100c';
   ctx.fillText('VC·2026', bcX + bcW / 2, bcY + bcH * 0.9);
-  // Centre line: the tagline (or title) in letterspaced capitals,
-  // fitted to the space between the chip and the barcode.
+  // Centre line: the tagline (or title) in heavy letterspaced
+  // capitals, fitted to the space BETWEEN the chip and the barcode
+  // and centred in that span — on a narrow canvas the height-scaled
+  // chip and barcode would otherwise eat the line's first and last
+  // letters.
   const line = ((state.tagline || '').trim() || (state.title || '').trim() || 'VICE HEAT').toUpperCase();
-  let size = Math.round(sh * 0.52);
-  ctx.font = `${size}px "Bebas Neue", sans-serif`;
-  const maxLineW = w * 0.58;
-  while (spacedWidth(ctx, line, size * 0.34) > maxLineW && size > 9) {
+  const midL = estX + estW + w * 0.02;
+  const midR = bcX - w * 0.02;
+  let size = Math.round(sh * 0.54);
+  ctx.font = `${size}px Anton, "Arial Black", sans-serif`;
+  const maxLineW = Math.max(40, midR - midL);
+  while (spacedWidth(ctx, line, size * 0.3) > maxLineW && size > 9) {
     size -= 1;
-    ctx.font = `${size}px "Bebas Neue", sans-serif`;
+    ctx.font = `${size}px Anton, "Arial Black", sans-serif`;
   }
   ctx.fillStyle = '#fff3d6';
   ctx.shadowColor = 'rgba(20, 2, 24, 0.65)';
   ctx.shadowBlur = size * 0.18;
-  drawSpacedText(ctx, line, w / 2, y0 + sh / 2 + size * 0.36, size * 0.34);
+  drawSpacedText(ctx, line, (midL + midR) / 2, y0 + sh / 2 + size * 0.36, size * 0.3);
   ctx.shadowBlur = 0;
 }
 
@@ -1447,20 +1616,35 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
   }
   if (state.layout === 'grid') {
     drawPanelChips(ctx, shapes, w, h);
-    if (w > h) drawSeal(ctx, shapes[1].x, h * 0.335, minSide * 0.088, -0.2);
+    if (w > h) drawSeal(ctx, shapes[1].x, h * 0.325, minSide * 0.082, -0.2);
     else if (w < h) drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
     else drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
   } else if (state.layout === 'duo') {
-    if (w < h) drawSeal(ctx, w * 0.855, h * 0.115, minSide * 0.088, 0.16);
+    // Portrait Duo: the seal rides the sea at the right edge, mid-
+    // height — the top corner it used before sits on the fisherman's
+    // hat, and a seal must never press a subject's head. The sea
+    // beside his face is empty water and sky, so the sticker lands
+    // there instead, clear of the face above and the title below.
+    if (w < h) drawSeal(ctx, w * 0.905, h * 0.5, minSide * 0.075, 0.16);
     else drawSeal(ctx, w * 0.87, h * 0.16, minSide * 0.085, 0.16);
   } else {
     drawSeal(ctx, w * 0.885, h * 0.13, minSide * 0.08, 0.16);
   }
   if (state.layout !== 'duo') {
-    const cy = titleBox
-      ? titleBox.baseline - titleBox.size - h * 0.042
-      : h * 0.6;
-    drawRatingRow(ctx, w, h, cy);
+    if (state.layout === 'grid' && w > h) {
+      // The review row rides in the hero panel's sky, right-aligned
+      // just inside the hero's right edge: over sky and palm crowns,
+      // clear of the heroine's hair (the reframed hero sits lower in
+      // her panel), clear of the gutter and of every satellite — the
+      // centred row it replaces floated across the gutter and buried
+      // the night panel's face and the hero's hair at once.
+      drawRatingRow(ctx, w, h, h * 0.045, { right: shapes[0].x + shapes[0].w - w * 0.018 });
+    } else {
+      const cy = titleBox
+        ? titleBox.baseline - titleBox.size - h * 0.042
+        : h * 0.6;
+      drawRatingRow(ctx, w, h, cy);
+    }
   }
   drawBannerStrip(ctx, w, h, state);
   drawMicrotext(ctx, w, h);
@@ -1478,12 +1662,17 @@ function fitFont(ctx, text, maxW, startSize, family) {
   return size;
 }
 
-// The official-cover treatment: never plain white — a sunset gradient fill
-// (cobalt -> violet -> pink -> orange) inside a thick dark-plum outline,
-// rimmed by one thin complementary line.
+// The default title treatment: a sunset gradient fill (cobalt ->
+// violet -> pink -> orange) inside a thick dark-plum outline, rimmed
+// by one thin complementary line. A grade may carry its own family
+// (`titleStops` + `titleRim`): Blockbuster's is the winners' sunset —
+// cream -> gold -> orange — inside the same deep plum, its rim a deep
+// maroon-plum instead of the cyan, so the lettering sits in the same
+// colour world as the photographs under it.
 const TITLE_STOPS = [[0, '#3060ce'], [0.38, '#913bc2'], [0.68, '#ff5395'], [1, '#ff944c']];
 
-function drawTitle(ctx, w, title, noir, size, baseline) {
+function drawTitle(ctx, w, title, noir, size, baseline, opts = {}) {
+  const cx = opts.cx ?? w / 2;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
@@ -1501,16 +1690,16 @@ function drawTitle(ctx, w, title, noir, size, baseline) {
     grad.addColorStop(0.78, '#e2e2e2');
     grad.addColorStop(1, '#555555');
   } else {
-    for (const [p, c] of TITLE_STOPS) grad.addColorStop(p, c);
+    for (const [p, c] of (opts.stops ?? TITLE_STOPS)) grad.addColorStop(p, c);
   }
   ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
   ctx.shadowBlur = size * 0.16;
   ctx.shadowOffsetY = size * 0.05;
   if (!noir) {
     // Thin complementary rim, widest stroke first.
-    ctx.strokeStyle = '#19e3ff';
+    ctx.strokeStyle = opts.rim ?? '#19e3ff';
     ctx.lineWidth = size * 0.16 + Math.max(3, size * 0.05);
-    ctx.strokeText(title, w / 2, baseline);
+    ctx.strokeText(title, cx, baseline);
   } else {
     // Edge depth for the chrome: a pale rim stroked a hair above the
     // lettering first, so once the black outline and the chrome fill
@@ -1519,16 +1708,16 @@ function drawTitle(ctx, w, title, noir, size, baseline) {
     // catches, and the depth a flat silver fill never has.
     ctx.strokeStyle = 'rgba(235, 235, 235, 0.4)';
     ctx.lineWidth = size * 0.16 + Math.max(3, size * 0.05);
-    ctx.strokeText(title, w / 2, baseline - size * 0.045);
+    ctx.strokeText(title, cx, baseline - size * 0.045);
   }
   ctx.strokeStyle = noir ? '#000000' : '#20082e';
   ctx.lineWidth = size * 0.16;
-  ctx.strokeText(title, w / 2, baseline);
+  ctx.strokeText(title, cx, baseline);
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
   ctx.fillStyle = grad;
-  ctx.fillText(title, w / 2, baseline);
-  return { size, baseline };
+  ctx.fillText(title, cx, baseline);
+  return { size, baseline, cx };
 }
 
 /** Script taglines read in title case ("One Last Score In The Sunset"). */
@@ -1536,18 +1725,19 @@ function scriptCase(s) {
   return s.toLowerCase().replace(/(^|\s)(\S)/g, (m, p, c) => p + c.toUpperCase());
 }
 
-function drawTagline(ctx, w, h, rawTag, noir, titleBox) {
+function drawTagline(ctx, w, h, rawTag, noir, titleBox, opts = {}) {
   const tag = scriptCase(rawTag.trim());
   if (!tag) return;
+  const cx = opts.cx ?? w / 2;
   const family = '"Yellowtail", "Bebas Neue", cursive';
   const start = titleBox ? titleBox.size * 0.5 : h * 0.062;
-  const size = fitFont(ctx, tag, w * 0.86, start, family);
+  const size = fitFont(ctx, tag, opts.maxW ?? w * 0.86, start, family);
   const baseline = titleBox ? titleBox.baseline + titleBox.size * 0.6 : h * 0.955;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   if (noir) {
     ctx.fillStyle = '#e8e8e8';
-    ctx.fillText(tag, w / 2, baseline);
+    ctx.fillText(tag, cx, baseline);
     return;
   }
   // Neon pink script: a soft dark edge for definition, then the glow pass —
@@ -1555,12 +1745,12 @@ function drawTagline(ctx, w, h, rawTag, noir, titleBox) {
   ctx.strokeStyle = 'rgba(60, 0, 30, 0.4)';
   ctx.lineWidth = Math.max(1, size * 0.03);
   ctx.lineJoin = 'round';
-  ctx.strokeText(tag, w / 2, baseline);
+  ctx.strokeText(tag, cx, baseline);
   ctx.shadowColor = '#ff2e88';
   ctx.shadowBlur = size * 0.45;
   ctx.fillStyle = '#ff5395';
-  ctx.fillText(tag, w / 2, baseline);
-  ctx.fillText(tag, w / 2, baseline);
+  ctx.fillText(tag, cx, baseline);
+  ctx.fillText(tag, cx, baseline);
   ctx.shadowBlur = 0;
 }
 
@@ -1598,12 +1788,18 @@ export function drawPoster(canvas, state) {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, w, h);
 
+  // White-balance harmonization (harmonize grades: Blockbuster): the
+  // panels' graded means are measured and per-panel gains computed
+  // before anything is drawn, so every satellite lands in the hero
+  // panel's colour world. Other grades skip this entirely.
+  const wbGains = grade.harmonize ? harmonizeGains(state, shapes) : null;
+
   // Panels: gradient-mapped photos; empty panels fall back to a deep
   // gradient so the poster never shows a hole.
   for (let i = 0; i < shapes.length; i++) {
     const photo = panelPhoto(state, i);
     if (photo && photo.img) {
-      drawPanelPhoto(ctx, shapes[i], photo, state.grade);
+      drawPanelPhoto(ctx, shapes[i], photo, state.grade, wbGains ? wbGains[i] : null);
     } else {
       ctx.save();
       tracePoly(ctx, shapes[i].poly);
@@ -1676,7 +1872,8 @@ export function drawPoster(canvas, state) {
     const bandH = h - gridH;
     if (title) {
       const size = fitFont(ctx, title, w * 0.94, bandH * 0.46, 'Anton, "Arial Black", sans-serif');
-      titleBox = drawTitle(ctx, w, title, noir, size, gridH + bandH * 0.55);
+      titleBox = drawTitle(ctx, w, title, noir, size, gridH + bandH * 0.55,
+        { stops: grade.titleStops, rim: grade.titleRim });
     }
   } else {
     // Scrim so the lettering reads over any photo. A dressed poster
@@ -1688,12 +1885,28 @@ export function drawPoster(canvas, state) {
     ctx.fillStyle = scrim;
     ctx.fillRect(0, h * 0.52, w, h * 0.48);
     if (title) {
-      const size = fitFont(ctx, title, w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
-      titleBox = drawTitle(ctx, w, title, noir, size, dressed ? h * 0.775 : h * 0.865);
+      // The dressed Grid in landscape carries its own lettering
+      // geometry: the title block is centred on the HERO panel and
+      // fitted to the hero's span, so the lettering lives over the
+      // hero and her car — never across the gutter over a satellite
+      // (the centred stack used to bury the night panel's whole face
+      // under the title and the review pill). The stack also rides
+      // higher than before, because the banner strip below it is a
+      // full design band now, not a footnote strip.
+      const heroCx = (dressed && state.layout === 'grid' && w > h)
+        ? shapes[0].x + shapes[0].w / 2
+        : null;
+      const size = fitFont(ctx, title, heroCx != null ? w * 0.64 : w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
+      titleBox = drawTitle(ctx, w, title, noir, size, dressed ? h * 0.752 : h * 0.865,
+        { cx: heroCx ?? w / 2, stops: grade.titleStops, rim: grade.titleRim });
     }
   }
   const tag = (state.tagline || '').trim();
-  if (tag) drawTagline(ctx, w, h, tag, noir, titleBox);
+  if (tag) {
+    const heroTagged = titleBox && titleBox.cx != null && titleBox.cx !== w / 2;
+    drawTagline(ctx, w, h, tag, noir, titleBox,
+      heroTagged ? { cx: titleBox.cx, maxW: w * 0.52 } : {});
+  }
 
   // Poster dressing: seal, rating row, panel chips, banner strip and
   // microtext — drawn over the lettering, under the frame.
