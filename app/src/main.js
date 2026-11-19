@@ -19,6 +19,7 @@ const state = {
   layout: 'trio',
   grade: 'sunset',
   size: '1080x1080',
+  dressing: false,
   title: 'VICE HEAT',
   tagline: 'ONE LAST SCORE IN THE SUNSET',
   active: 0,
@@ -152,6 +153,20 @@ document.querySelectorAll('[data-size]').forEach((b) => {
     document.querySelectorAll('[data-size]').forEach((x) => x.classList.toggle('on', x === b));
     redraw();
   });
+});
+
+// Poster dressing toggle: the one-sheet furniture (seal, rating row,
+// panel captions, banner strip, microtext) drawn into the poster —
+// and therefore into every export — while it is on.
+const dressingBtn = document.getElementById('dressingBtn');
+function syncDressingBtn() {
+  dressingBtn.classList.toggle('on', !!state.dressing);
+  dressingBtn.textContent = state.dressing ? 'Poster dressing: On' : 'Poster dressing: Off';
+}
+dressingBtn.addEventListener('click', () => {
+  state.dressing = !state.dressing;
+  syncDressingBtn();
+  redraw();
 });
 
 document.getElementById('photo').addEventListener('change', async (e) => {

@@ -12,10 +12,15 @@
 // lettering sits in a title band below its nine panels), a colour grade
 // (Sunset, Neon Nights, Palm Gold, Noir, Poster Ink — all gradient-mapped,
 // Poster Ink with a highlight-masked halftone, Noir with an ordered Bayer
-// dither through its posterize — and Key Art, which paints instead of
-// grading: an edge-aware softened base, an eight-band cel ramp and two
-// coats of drawn Sobel ink contours, the second reserved for the strongest
-// edges) and a post size, type a title
+// dither through its posterize — Blockbuster, the photographic class: a
+// continuous gradient map with no posterize, enriched by an S-curve and a
+// saturation scale so photo detail survives whole — and Key Art, which
+// paints instead of grading: an edge-aware softened base, an eight-band
+// cel ramp and two coats of drawn Sobel ink contours, the second reserved
+// for the strongest edges), an optional poster dressing (a starburst seal,
+// a review-star line, per-panel caption chips, a palm-silhouette banner
+// strip and a credit microtext, all drawn into the export while it is on)
+// and a post size, type a title
 // and a tagline, and export a PNG (one size, or all three at once).
 // Its six sample photos (app/samples/) were made for make.fun with an
 // image model and are free to use: three bright Vice scenes, one neon

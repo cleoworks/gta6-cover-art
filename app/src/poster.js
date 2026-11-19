@@ -14,7 +14,17 @@
 // finishing pass (grain + vignette), then layered
 // lettering: a sunset-gradient title with a double outline and a neon
 // script tagline (Mosaic instead gives its lettering a title band below
-// the grid, so all nine panels stay fully visible). Dark photos are
+// the grid, so all nine panels stay fully visible). The Blockbuster
+// grade is the photographic counterweight to Key Art: a continuous
+// (unposterized) sunset gradient map at a moderate mix plus a
+// saturation-and-contrast enrichment, so the photo's own texture and
+// detail survive intact under a deep, glossy cinema finish. A poster
+// can also carry dressing (state.dressing): the furniture of a real
+// one-sheet — a starburst seal, a review rating row, per-panel caption
+// chips on the Grid, a palm-silhouette banner strip with an EST. chip
+// and a drawn barcode, and a microtext credit line — all drawn
+// procedurally into the render itself, so it exports with the poster.
+// Dark photos are
 // steadied first by a gated auto-exposure lift (bright photos pass
 // through untouched; very dark photos are lifted hard, under a highlight
 // shoulder that keeps lit signs from blowing out), and a photo shown
@@ -51,6 +61,36 @@ export const GRADES = {
     sunStops: ['#fff3b0', '#ffd166', '#ff944c'],
     ramp: [[0, [16, 10, 46]], [0.28, [94, 42, 132]], [0.52, [199, 62, 125]], [0.76, [255, 126, 71]], [1, [255, 217, 160]]],
     mix: 0.52,
+    accent: '#ff2e63',
+    tagText: '#1c0b3d',
+    scrim: '10, 4, 20',
+  },
+  blockbuster: {
+    // Blockbuster: the photographic class. Where Key Art paints over
+    // the photograph, Blockbuster trusts it: a CONTINUOUS gradient map
+    // (steps 256 — no cel plateaus at all) in the deep sunset family —
+    // violet-plum shadows, a magenta low-mid, orange-gold highlights —
+    // at a moderate mix, so the photo's own colours and ALL of its
+    // texture (skin detail, fabric weave, water sparkle) survive; then
+    // an enrichment pass (see `enrich` in gradedPanelCanvas) adds a
+    // gentle contrast shoulder to the lookup and lifts saturation
+    // around each pixel's own luminance, so panels land rich and
+    // glossy like a cinema one-sheet instead of flat like a filter.
+    // Skin is protected the photographic way: the mid ramp stays warm
+    // rather than pink, the mix leaves the photo's own skin hue in
+    // charge, and the saturation lift is luminance-centred, so faces
+    // gain glow, not sunburn. No softened base, no ink, no posterize:
+    // detail in, detail out.
+    label: 'Blockbuster',
+    sky: ['#2b1055', '#7597de'],
+    skyTop: '#1c0b3d',
+    sun: '#ffd166',
+    sunCore: '#fff3b0',
+    sunStops: ['#fff3b0', '#ffd166', '#ff944c'],
+    ramp: [[0, [24, 10, 52]], [0.24, [96, 34, 112]], [0.46, [186, 58, 118]], [0.68, [244, 102, 66]], [0.86, [255, 172, 100]], [1, [255, 228, 172]]],
+    steps: 256,
+    mix: 0.55,
+    enrich: { sat: 1.24, curve: 0.16 },
     accent: '#ff2e63',
     tagText: '#1c0b3d',
     scrim: '10, 4, 20',
@@ -784,6 +824,17 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     const ditherAmp = grade.dither
       ? grade.dither * (255 / ((grade.steps ?? TONAL_STEPS) - 1))
       : 0;
+    // Enrichment (grades that carry `enrich`: Blockbuster). `curve`
+    // bends the luminance the LUT is looked up at through a gentle
+    // smoothstep S — shadows deepen, highlights lift, midtones barely
+    // move — and `sat` scales each mixed pixel's distance from its own
+    // luminance, restoring the saturation a gradient map spends. Both
+    // are per-pixel and detail-preserving by construction: nothing is
+    // resampled, blurred or flattened, so photographic texture passes
+    // through untouched. Grades without `enrich` skip both branches
+    // and render exactly as before.
+    const eCurve = grade.enrich?.curve ?? 0;
+    const eSat = grade.enrich?.sat ?? 0;
     for (let y = 0; y < ch; y++) {
       const rowBase = y * cw;
       const bayerRow = BAYER8[y & 7];
@@ -798,7 +849,12 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
           b = expo.lut[b];
         }
         const lum = (r * 77 + g * 150 + b * 29) >> 8;
-        let o = lum * 3;
+        let mapLum = lum;
+        if (eCurve) {
+          const t = lum / 255;
+          mapLum = Math.round(255 * (t + eCurve * (t * t * (3 - 2 * t) - t)));
+        }
+        let o = mapLum * 3;
         if (ditherAmp) {
           const dl = Math.max(0, Math.min(255,
             Math.round(lum + ((bayerRow[x & 7] + 0.5) / 64 - 0.5) * ditherAmp)));
@@ -814,9 +870,18 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
           tg = smoothLut[so + 1] + (tg - smoothLut[so + 1]) * wgt;
           tb = smoothLut[so + 2] + (tb - smoothLut[so + 2]) * wgt;
         }
-        px[i] = r + (tr - r) * mix;
-        px[i + 1] = g + (tg - g) * mix;
-        px[i + 2] = b + (tb - b) * mix;
+        let nr = r + (tr - r) * mix;
+        let ng = g + (tg - g) * mix;
+        let nb = b + (tb - b) * mix;
+        if (eSat) {
+          const l = (nr * 77 + ng * 150 + nb * 29) >> 8;
+          nr = Math.max(0, Math.min(255, l + (nr - l) * eSat));
+          ng = Math.max(0, Math.min(255, l + (ng - l) * eSat));
+          nb = Math.max(0, Math.min(255, l + (nb - l) * eSat));
+        }
+        px[i] = nr;
+        px[i + 1] = ng;
+        px[i + 2] = nb;
       }
     }
     ctx.putImageData(data, 0, 0);
@@ -1051,6 +1116,356 @@ function applyFinishing(ctx, w, h) {
   ctx.restore();
 }
 
+// --- Poster dressing ------------------------------------------------------
+//
+// The furniture of a real cinema one-sheet, drawn procedurally into the
+// render (never pasted on afterwards), so it is part of every export
+// while the toggle is on. Everything is our own invention — our seal
+// text, our review line, our place names — drawn with the bundled OFL
+// faces. The element set follows the layout: the Grid gets the full
+// dressing (seal, rating row, one caption chip per panel, banner strip,
+// microtext); the Duo gets the seal, the strip and the microtext;
+// Trio and Solo get the seal, the rating row, the strip and the
+// microtext; Mosaic — whose lettering already lives in its own band —
+// gets the seal alone. With the toggle off, none of this runs and every
+// render is exactly what it was before the feature existed.
+
+const REVIEW_QUOTE = '"PURE VICE HEAT"';
+const REVIEW_SOURCE = 'THE STRIP GAZETTE';
+const MICROTEXT = 'VICE COVER STUDIO — SHOT ON YOUR OWN CAMERA — GRADED BY HAND — NO PHOTO LEAVES THIS MACHINE — CAT. NO. VC-2026-001';
+
+// Caption chips for the Grid's five panels, in panel order — the
+// bundled scenes: the boulevard hero, the pier fisherman, the
+// convertible driver, the night portrait, the marina portrait.
+const PANEL_CAPTIONS = [
+  ['PALMERA BOULEVARD', '6:47 PM — SHE RUNS THIS STRIP'],
+  ['HARROW PIER', '5:58 AM — FIRST CAST'],
+  ['COASTLINE RUN', '7:15 PM — TOP DOWN, NO BRAKES'],
+  ['NEON DISTRICT', '11:48 PM — AFTER DARK'],
+  ['MARINA DEL FARO', '8:03 PM — SMILING AT THE STORM'],
+];
+
+function rr(ctx, x, y, w, h, r) {
+  const q = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + q, y);
+  ctx.lineTo(x + w - q, y);
+  ctx.arcTo(x + w, y, x + w, y + q, q);
+  ctx.lineTo(x + w, y + h - q);
+  ctx.arcTo(x + w, y + h, x + w - q, y + h, q);
+  ctx.lineTo(x + q, y + h);
+  ctx.arcTo(x, y + h, x, y + h - q, q);
+  ctx.lineTo(x, y + q);
+  ctx.arcTo(x, y, x + q, y, q);
+  ctx.closePath();
+}
+
+/** A five-pointed star centred on (cx, cy), one point up. */
+function starPath(ctx, cx, cy, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.42;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const x = cx + Math.cos(a) * rad;
+    const y = cy + Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+/** Letterspaced capitals, centred on cx: returns the drawn width. */
+function drawSpacedText(ctx, text, cx, y, spacing) {
+  let total = 0;
+  for (const ch of text) total += ctx.measureText(ch).width + spacing;
+  total -= spacing;
+  let x = cx - total / 2;
+  const prev = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (const ch of text) {
+    ctx.fillText(ch, x, y);
+    x += ctx.measureText(ch).width + spacing;
+  }
+  ctx.textAlign = prev;
+  return total;
+}
+
+function spacedWidth(ctx, text, spacing) {
+  let total = 0;
+  for (const ch of text) total += ctx.measureText(ch).width + spacing;
+  return total - spacing;
+}
+
+/** The starburst seal: a magenta burst with a dark rim, a cream centre
+ *  disc, three small stars, ORIGINAL in Anton and VICE COVER letter-
+ *  spaced under it — our own seal, tilted like a sticker slapped onto
+ *  the finished poster. */
+function drawSeal(ctx, cx, cy, r, rot) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  const points = 18;
+  for (let i = 0; i < points * 2; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.83;
+    const a = (i * Math.PI) / points;
+    const x = Math.cos(a) * rad;
+    const y = Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#ff2e63';
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, r * 0.035);
+  ctx.strokeStyle = '#20082e';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.74, 0, Math.PI * 2);
+  ctx.fillStyle = '#fdf3d0';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, r * 0.022);
+  ctx.strokeStyle = 'rgba(32, 8, 46, 0.85)';
+  ctx.stroke();
+  ctx.fillStyle = '#20082e';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  for (let i = -1; i <= 1; i++) {
+    starPath(ctx, i * r * 0.3, -r * 0.4, r * 0.11);
+    ctx.fillStyle = '#e8a100';
+    ctx.fill();
+  }
+  ctx.fillStyle = '#20082e';
+  ctx.font = `${Math.round(r * 0.335)}px Anton, "Arial Black", sans-serif`;
+  ctx.fillText('ORIGINAL', 0, r * 0.1);
+  ctx.font = `${Math.round(r * 0.185)}px "Bebas Neue", sans-serif`;
+  drawSpacedText(ctx, 'VICE COVER', 0, r * 0.42, r * 0.045);
+  ctx.restore();
+}
+
+/** The review row: five gold stars and our invented pull-quote on a
+ *  soft dark pill, centred just above the title — the line a real
+ *  one-sheet carries from its best review. */
+function drawRatingRow(ctx, w, h, cy) {
+  const starR = h * 0.0155;
+  const quote = `${REVIEW_QUOTE} — ${REVIEW_SOURCE}`;
+  ctx.font = `${Math.round(h * 0.029)}px "Bebas Neue", sans-serif`;
+  const tw = ctx.measureText(quote).width;
+  const starsW = 5 * starR * 2.3;
+  const gap = h * 0.016;
+  const padX = h * 0.02;
+  const totalW = starsW + gap + tw;
+  const x0 = (w - totalW) / 2;
+  const pillH = h * 0.058;
+  rr(ctx, x0 - padX, cy - pillH / 2, totalW + padX * 2, pillH, pillH / 2);
+  ctx.fillStyle = 'rgba(10, 4, 20, 0.62)';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, h * 0.0016);
+  ctx.strokeStyle = 'rgba(255, 243, 214, 0.4)';
+  ctx.stroke();
+  for (let i = 0; i < 5; i++) {
+    starPath(ctx, x0 + starR + i * starR * 2.3, cy, starR);
+    ctx.fillStyle = '#ffc93c';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, h * 0.0012);
+    ctx.strokeStyle = 'rgba(32, 8, 46, 0.55)';
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#fff3d6';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(quote, x0 + starsW + gap, cy + h * 0.0102);
+}
+
+/** One caption chip per Grid panel, top-left inside the panel: a dark
+ *  chip with a magenta spine, the place in Anton and the time-and-beat
+ *  line under it in Bebas — the cover lines of the bundled scenes. */
+function drawPanelChips(ctx, shapes, w, h) {
+  const nameSize = Math.round(h * 0.0205);
+  const subSize = Math.round(h * 0.0155);
+  const padX = Math.max(8, w * 0.007);
+  const padY = Math.max(5, h * 0.007);
+  const barW = Math.max(3, w * 0.0024);
+  const lineGap = Math.max(2, h * 0.003);
+  for (let i = 0; i < shapes.length && i < PANEL_CAPTIONS.length; i++) {
+    const [name, sub] = PANEL_CAPTIONS[i];
+    ctx.font = `${nameSize}px Anton, "Arial Black", sans-serif`;
+    const nameW = ctx.measureText(name).width;
+    ctx.font = `${subSize}px "Bebas Neue", sans-serif`;
+    const subW = ctx.measureText(sub).width;
+    const chipW = barW + padX * 2 + Math.max(nameW, subW);
+    const chipH = padY * 2 + nameSize + lineGap + subSize;
+    // The night panel's subject fills its top-left corner and its whole
+    // lower half sits behind the title, so his chip hangs at the
+    // panel's top-right, over the neon signage — clear of the face.
+    // Every other chip hangs at its panel's top-left.
+    const x = i === 3
+      ? shapes[i].x + shapes[i].w - chipW - w * 0.011
+      : shapes[i].x + w * 0.011;
+    const y = shapes[i].y + h * 0.013;
+    ctx.fillStyle = 'rgba(8, 4, 18, 0.8)';
+    ctx.fillRect(x, y, chipW, chipH);
+    ctx.fillStyle = '#ff2e63';
+    ctx.fillRect(x, y, barW, chipH);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#fff3d6';
+    ctx.font = `${nameSize}px Anton, "Arial Black", sans-serif`;
+    ctx.fillText(name, x + barW + padX, y + padY + nameSize * 0.84);
+    ctx.fillStyle = '#ffd7e6';
+    ctx.font = `${subSize}px "Bebas Neue", sans-serif`;
+    ctx.fillText(sub, x + barW + padX, y + padY + nameSize + lineGap + subSize * 0.84);
+  }
+}
+
+/** One palm silhouette for the banner strip: a curved trunk and six
+ *  drooping fronds, drawn as strokes in near-black plum. Deterministic
+ *  variation comes from the caller's lean/height choices. */
+function drawPalmSilhouette(ctx, x, baseY, height, lean) {
+  const topX = x + lean * height;
+  const topY = baseY - height;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(14, 4, 26, 0.68)';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(2, height * 0.075);
+  ctx.beginPath();
+  ctx.moveTo(x, baseY);
+  ctx.quadraticCurveTo(x + lean * height * 0.25, baseY - height * 0.62, topX, topY);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1.5, height * 0.05);
+  const fronds = [-2.85, -2.35, -1.95, -1.45, -1.0, -0.5];
+  for (let f = 0; f < fronds.length; f++) {
+    const a = fronds[f] + lean * 0.35;
+    const len = height * (0.4 + 0.07 * ((f * 37) % 3));
+    const ex = topX + Math.cos(a) * len;
+    const ey = topY + Math.sin(a) * len + len * 0.34;
+    const cxp = topX + Math.cos(a) * len * 0.55;
+    const cyp = topY + Math.sin(a) * len * 0.55 - len * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(topX, topY);
+    ctx.quadraticCurveTo(cxp, cyp, ex, ey);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The banner strip along the poster's foot: a sunset band carrying a
+ *  row of palm silhouettes, an EST. 2026 chip at the left, the tagline
+ *  in letterspaced capitals at the centre and a drawn barcode block at
+ *  the right — the full bottom furniture of a printed one-sheet. */
+function drawBannerStrip(ctx, w, h, state) {
+  const y0 = Math.round(h * 0.908);
+  const sh = Math.round(h * 0.058);
+  const grad = ctx.createLinearGradient(0, y0, 0, y0 + sh);
+  grad.addColorStop(0, '#2b1055');
+  grad.addColorStop(0.5, '#913bc2');
+  grad.addColorStop(0.78, '#ff5395');
+  grad.addColorStop(1, '#ff944c');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, y0, w, sh);
+  ctx.fillStyle = 'rgba(255, 243, 214, 0.75)';
+  ctx.fillRect(0, y0, w, Math.max(2, h * 0.0022));
+  // Palms along the band, behind the furniture.
+  const palms = 11;
+  for (let k = 0; k < palms; k++) {
+    const px = ((k + 0.5) / palms) * w + (dotHash(k, 31) - 0.5) * w * 0.02;
+    drawPalmSilhouette(ctx, px, y0 + sh + 2, sh * (0.8 + dotHash(k, 47) * 0.25), (dotHash(k, 13) - 0.5) * 0.7);
+  }
+  // EST. chip, left.
+  const estSize = Math.round(sh * 0.44);
+  ctx.font = `${estSize}px "Bebas Neue", sans-serif`;
+  const estText = 'EST. 2026';
+  const estW = ctx.measureText(estText).width + sh * 0.36;
+  const estX = w * 0.016;
+  const estY = y0 + (sh - sh * 0.68) / 2;
+  rr(ctx, estX, estY, estW, sh * 0.68, sh * 0.1);
+  ctx.fillStyle = 'rgba(10, 4, 20, 0.5)';
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, h * 0.0018);
+  ctx.strokeStyle = '#fff3d6';
+  ctx.stroke();
+  ctx.fillStyle = '#fff3d6';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(estText, estX + estW / 2, estY + sh * 0.68 / 2 + estSize * 0.36);
+  // Barcode block, right: a white card of deterministic bars over a
+  // tiny catalogue line — drawn, never an image.
+  const bcW = w * 0.056;
+  const bcH = sh * 0.7;
+  const bcX = w - w * 0.016 - bcW;
+  const bcY = y0 + (sh - bcH) / 2;
+  ctx.fillStyle = '#fdfdf8';
+  ctx.fillRect(bcX, bcY, bcW, bcH);
+  ctx.fillStyle = '#14100c';
+  let bx = bcX + bcW * 0.07;
+  let bi = 0;
+  while (bx < bcX + bcW * 0.93) {
+    const bw = (1 + Math.floor(dotHash(bi, 7) * 3)) * Math.max(1, bcW * 0.012);
+    if (bi % 3 !== 2) ctx.fillRect(bx, bcY + bcH * 0.1, bw, bcH * 0.58);
+    bx += bw + Math.max(1, bcW * 0.016);
+    bi++;
+  }
+  ctx.font = `${Math.round(bcH * 0.21)}px "Bebas Neue", sans-serif`;
+  ctx.fillStyle = '#14100c';
+  ctx.fillText('VC·2026', bcX + bcW / 2, bcY + bcH * 0.9);
+  // Centre line: the tagline (or title) in letterspaced capitals,
+  // fitted to the space between the chip and the barcode.
+  const line = ((state.tagline || '').trim() || (state.title || '').trim() || 'VICE HEAT').toUpperCase();
+  let size = Math.round(sh * 0.52);
+  ctx.font = `${size}px "Bebas Neue", sans-serif`;
+  const maxLineW = w * 0.58;
+  while (spacedWidth(ctx, line, size * 0.34) > maxLineW && size > 9) {
+    size -= 1;
+    ctx.font = `${size}px "Bebas Neue", sans-serif`;
+  }
+  ctx.fillStyle = '#fff3d6';
+  ctx.shadowColor = 'rgba(20, 2, 24, 0.65)';
+  ctx.shadowBlur = size * 0.18;
+  drawSpacedText(ctx, line, w / 2, y0 + sh / 2 + size * 0.36, size * 0.34);
+  ctx.shadowBlur = 0;
+}
+
+/** The microtext credit line at the very foot of the poster — one
+ *  letterspaced line of small capitals, our own credits. */
+function drawMicrotext(ctx, w, h) {
+  let size = Math.max(9, Math.round(h * 0.0125));
+  ctx.font = `${size}px "Bebas Neue", sans-serif`;
+  while (spacedWidth(ctx, MICROTEXT, size * 0.22) > w * 0.92 && size > 7) {
+    size -= 1;
+    ctx.font = `${size}px "Bebas Neue", sans-serif`;
+  }
+  ctx.fillStyle = 'rgba(255, 243, 214, 0.8)';
+  ctx.textBaseline = 'alphabetic';
+  drawSpacedText(ctx, MICROTEXT, w / 2, h * 0.988, size * 0.22);
+}
+
+/** The dressing pass, run after the lettering and before the frame.
+ *  Element set by layout — see the section header. */
+function drawDressing(ctx, w, h, state, shapes, titleBox) {
+  const minSide = Math.min(w, h);
+  if (state.layout === 'mosaic') {
+    drawSeal(ctx, w * 0.94, h * 0.055, minSide * 0.05, 0.18);
+    return;
+  }
+  if (state.layout === 'grid') {
+    drawPanelChips(ctx, shapes, w, h);
+    if (w > h) drawSeal(ctx, shapes[1].x, h * 0.335, minSide * 0.088, -0.2);
+    else if (w < h) drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
+    else drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
+  } else if (state.layout === 'duo') {
+    if (w < h) drawSeal(ctx, w * 0.855, h * 0.115, minSide * 0.088, 0.16);
+    else drawSeal(ctx, w * 0.87, h * 0.16, minSide * 0.085, 0.16);
+  } else {
+    drawSeal(ctx, w * 0.885, h * 0.13, minSide * 0.08, 0.16);
+  }
+  if (state.layout !== 'duo') {
+    const cy = titleBox
+      ? titleBox.baseline - titleBox.size - h * 0.042
+      : h * 0.6;
+    drawRatingRow(ctx, w, h, cy);
+  }
+  drawBannerStrip(ctx, w, h, state);
+  drawMicrotext(ctx, w, h);
+}
+
 // --- Lettering ------------------------------------------------------------
 
 function fitFont(ctx, text, maxW, startSize, family) {
@@ -1161,6 +1576,12 @@ export function drawPoster(canvas, state) {
   const grade = GRADES[state.grade] ?? GRADES.sunset;
   const noir = state.grade === 'noir';
   const mosaic = state.layout === 'mosaic';
+  // Poster dressing (opt-in via state.dressing): the one-sheet
+  // furniture drawn by drawDressing after the lettering. While it is
+  // on, the lettering block rides higher so the banner strip owns the
+  // poster's foot; while it is off, every coordinate below is exactly
+  // what it was before the feature existed.
+  const dressed = !!state.dressing;
   // Mosaic's lettering never overlays the grid: the nine cells occupy the
   // top ~78% of the canvas and the title + tagline sit in a title band of
   // their own below the grid (filled after the panels, before the
@@ -1258,19 +1679,25 @@ export function drawPoster(canvas, state) {
       titleBox = drawTitle(ctx, w, title, noir, size, gridH + bandH * 0.55);
     }
   } else {
-    // Scrim so the lettering reads over any photo.
+    // Scrim so the lettering reads over any photo. A dressed poster
+    // deepens it a touch, so the rating row and the seal read as
+    // printed furniture, not stickers.
     const scrim = ctx.createLinearGradient(0, h * 0.52, 0, h);
     scrim.addColorStop(0, `rgba(${grade.scrim}, 0)`);
-    scrim.addColorStop(1, `rgba(${grade.scrim}, 0.82)`);
+    scrim.addColorStop(1, `rgba(${grade.scrim}, ${dressed ? 0.88 : 0.82})`);
     ctx.fillStyle = scrim;
     ctx.fillRect(0, h * 0.52, w, h * 0.48);
     if (title) {
       const size = fitFont(ctx, title, w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
-      titleBox = drawTitle(ctx, w, title, noir, size, h * 0.865);
+      titleBox = drawTitle(ctx, w, title, noir, size, dressed ? h * 0.775 : h * 0.865);
     }
   }
   const tag = (state.tagline || '').trim();
   if (tag) drawTagline(ctx, w, h, tag, noir, titleBox);
+
+  // Poster dressing: seal, rating row, panel chips, banner strip and
+  // microtext — drawn over the lettering, under the frame.
+  if (dressed) drawDressing(ctx, w, h, state, shapes, titleBox);
 
   // Poster frame: dark outer edge, thin light inner line.
   ctx.strokeStyle = 'rgba(5, 2, 10, 0.6)';

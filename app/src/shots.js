@@ -19,6 +19,7 @@ export async function runShot(shot, query, helpers) {
   if (query.get('size') && SIZES[query.get('size')]) state.size = query.get('size');
   if (query.get('title')) state.title = query.get('title');
   if (query.get('tagline')) state.tagline = query.get('tagline');
+  if (query.get('dressing')) state.dressing = query.get('dressing') !== '0';
 
   // Load the samples into the panels: six distinct photos up front —
   // so a TRIO shows three different photos, a Grid five panels over five
@@ -54,6 +55,9 @@ export async function runShot(shot, query, helpers) {
   document.querySelectorAll('[data-size]').forEach((b) => b.classList.toggle('on', b.dataset.size === state.size));
   document.getElementById('title').value = state.title;
   document.getElementById('tagline').value = state.tagline;
+  const dressingBtn = document.getElementById('dressingBtn');
+  dressingBtn.classList.toggle('on', !!state.dressing);
+  dressingBtn.textContent = state.dressing ? 'Poster dressing: On' : 'Poster dressing: Off';
 
   // Wait for the display faces explicitly: fonts.ready alone can resolve
   // before an unused @font-face (Yellowtail) has actually been fetched.

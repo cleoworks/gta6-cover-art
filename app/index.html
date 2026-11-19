@@ -30,6 +30,7 @@
       <legend>Colour grade</legend>
       <div class="row" role="group" aria-label="Colour grade">
         <button type="button" data-grade="sunset" class="on sw-sunset">Sunset</button>
+        <button type="button" data-grade="blockbuster" class="sw-blockbuster">Blockbuster</button>
         <button type="button" data-grade="neon" class="sw-neon">Neon Nights</button>
         <button type="button" data-grade="gold" class="sw-gold">Palm Gold</button>
         <button type="button" data-grade="noir" class="sw-noir">Noir</button>
@@ -53,6 +54,14 @@
     <label>Tagline
       <input id="tagline" type="text" maxlength="48" value="ONE LAST SCORE IN THE SUNSET">
     </label>
+
+    <fieldset>
+      <legend>Poster dressing</legend>
+      <div class="row" role="group" aria-label="Poster dressing">
+        <button type="button" id="dressingBtn">Poster dressing: Off</button>
+      </div>
+      <p class="hint">Seal, review stars, panel captions &amp; banner strip — drawn into the export.</p>
+    </fieldset>
 
     <div class="row">
       <button id="export" type="button" class="export">Export PNG</button>

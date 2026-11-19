@@ -25,7 +25,7 @@ html, body { margin: 0; min-height: 100%; background: #0d0716; color: #f2ecff; f
 
 .app { display: flex; gap: 28px; align-items: flex-start; justify-content: center; min-height: 100vh; padding: 22px; }
 
-.controls { display: flex; flex-direction: column; gap: 6px; width: 320px; flex: none; }
+.controls { display: flex; flex-direction: column; gap: 4px; width: 320px; flex: none; }
 .controls h1 {
   margin: 0;
   font-family: 'Anton', 'Arial Black', sans-serif;
@@ -41,9 +41,9 @@ html, body { margin: 0; min-height: 100%; background: #0d0716; color: #f2ecff; f
 .fine { margin: 0; color: #8d83a8; font-size: 12px; }
 .hint { margin: 0; color: #b9aed6; font-size: 12px; }
 
-fieldset { margin: 0; padding: 8px; border: 1px solid #3a2d5c; border-radius: 10px; background: #150d26; }
+fieldset { margin: 0; padding: 6px 8px; border: 1px solid #3a2d5c; border-radius: 10px; background: #150d26; }
 legend { padding: 0 6px; font-weight: 700; color: #ffd166; }
-.row { display: flex; flex-wrap: wrap; gap: 6px; margin: 3px 0; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; }
 /* Compact button grids: the panel picker always shows three buttons per
    row (so Mosaic's nine picks take exactly three rows) and the sample
    buttons pair up, keeping the whole control column — framing controls
@@ -67,6 +67,8 @@ button:hover { border-color: #ff2e63; }
 button.on { background: #ff2e63; border-color: #ff2e63; color: #fff; }
 button:disabled { opacity: 0.35; cursor: default; }
 button.sw-sunset.on { background: linear-gradient(90deg, #ff7b00, #ff2e63); }
+button.sw-blockbuster.on { background: linear-gradient(90deg, #ff944c, #ff5395); border-color: #ff944c; color: #fff; }
+#dressingBtn { flex: 1; }
 button.sw-neon.on { background: linear-gradient(90deg, #00b3c8, #ff00a8); }
 button.sw-gold.on { background: linear-gradient(90deg, #e8a100, #7a5200); color: #fff; }
 button.sw-noir.on { background: #e8e8e8; color: #0a0a0a; border-color: #e8e8e8; }
