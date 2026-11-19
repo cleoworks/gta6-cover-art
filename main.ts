@@ -14,10 +14,11 @@
 // Poster Ink with a highlight-masked halftone, Noir with an ordered Bayer
 // dither through its posterize) and a post size, type a title
 // and a tagline, and export a PNG (one size, or all three at once).
-// Its five sample photos (app/samples/) were made for make.fun with an
+// Its six sample photos (app/samples/) were made for make.fun with an
 // image model and are free to use: three bright Vice scenes, one neon
-// night portrait, so a dark photo is part of the demo too, and a marina
-// portrait in a red dress.
+// night portrait, so a dark photo is part of the demo too, a marina
+// portrait in a red dress, and a surfer carrying her board at golden
+// hour.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

@@ -60,13 +60,7 @@
 
     <fieldset>
       <legend>Photo — <span id="panelLabel">Panel 1 of 3</span></legend>
-      <div class="row" role="group" aria-label="Active panel">
-        <button type="button" class="panel-pick on">Panel 1</button>
-        <button type="button" class="panel-pick">Panel 2</button>
-        <button type="button" class="panel-pick">Panel 3</button>
-        <button type="button" class="panel-pick">Panel 4</button>
-        <button type="button" class="panel-pick">Panel 5</button>
-      </div>
+      <div class="row" id="panelPicks" role="group" aria-label="Active panel"></div>
       <label class="file">Upload a photo
         <input id="photo" type="file" accept="image/*">
       </label>
@@ -76,6 +70,7 @@
         <button type="button" data-sample="samples/convertible.jpg">Sample: Convertible</button>
         <button type="button" data-sample="samples/night.jpg">Sample: Neon Night</button>
         <button type="button" data-sample="samples/marina.jpg">Sample: Marina</button>
+        <button type="button" data-sample="samples/surfer.jpg">Sample: Surfer</button>
       </div>
       <div class="row">
         <button type="button" id="fillAll">Same photo in all panels</button>

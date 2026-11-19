@@ -3,9 +3,11 @@
 //   ?shot=cover&layout=trio&grade=noir&size=1920x1080 — the exported PNG itself,
 //   shown full-bleed so the screenshot is the PNG the app wrote, scaled down.
 // `photo` picks the sample for panel 1 (samples/<photo>.jpg), `photo2` for
-// panel 2, `photo3` for panel 3, `photo4` for panel 4 (the night sample)
-// and `photo5` for panel 5 (the marina sample) — so a Grid shows five
-// different photos and Mosaic rotates five. window.__shotReady is set
+// panel 2, `photo3` for panel 3, `photo4` for panel 4 (the night sample),
+// `photo5` for panel 5 (the marina sample) and `photo6` for panel 6 (the
+// surfer sample); panels 7-9 repeat panels 1-3 with the same Image
+// objects, so the renderer mirrors them — a Grid shows five different
+// photos and Mosaic rotates six. window.__shotReady is set
 // once the scene is painted.
 import { GRADES, LAYOUTS, SIZES } from './poster.js';
 
@@ -18,15 +20,16 @@ export async function runShot(shot, query, helpers) {
   if (query.get('title')) state.title = query.get('title');
   if (query.get('tagline')) state.tagline = query.get('tagline');
 
-  // Load the samples into the panels: five distinct photos up front —
+  // Load the samples into the panels: six distinct photos up front —
   // so a TRIO shows three different photos, a Grid five panels over five
-  // photos, and Mosaic repeats less.
+  // photos, and Mosaic repeats less (six photos over nine cells).
   const first = `samples/${query.get('photo') ?? 'boulevard'}.jpg`;
   const second = `samples/${query.get('photo2') ?? 'pier'}.jpg`;
   const third = `samples/${query.get('photo3') ?? 'convertible'}.jpg`;
   const fourth = `samples/${query.get('photo4') ?? 'night'}.jpg`;
   const fifth = `samples/${query.get('photo5') ?? 'marina'}.jpg`;
-  const [imgA, imgB, imgC, imgD, imgE] = await Promise.all([loadImage(first), loadImage(second), loadImage(third), loadImage(fourth), loadImage(fifth)]);
+  const sixth = `samples/${query.get('photo6') ?? 'surfer'}.jpg`;
+  const [imgA, imgB, imgC, imgD, imgE, imgF] = await Promise.all([loadImage(first), loadImage(second), loadImage(third), loadImage(fourth), loadImage(fifth), loadImage(sixth)]);
   const put = (i, src, img, framing) => {
     if (!state.panels[i]) return;
     state.panels[i].img = img;
@@ -38,6 +41,12 @@ export async function runShot(shot, query, helpers) {
   put(2, third, imgC);
   put(3, fourth, imgD);
   put(4, fifth, imgE);
+  put(5, sixth, imgF);
+  // Mosaic's last row: second showings of the first three photos, sharing
+  // their Image objects so the renderer mirrors them like the editor does.
+  put(6, first, imgA);
+  put(7, second, imgB);
+  put(8, third, imgC);
 
   // Keep the editor controls in sync with the scene's choices.
   document.querySelectorAll('[data-layout]').forEach((b) => b.classList.toggle('on', b.dataset.layout === state.layout));

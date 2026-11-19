@@ -8,8 +8,8 @@
 // posterized ramp to a smooth one at low luminance so shaded faces keep
 // their features, and Noir additionally breaks its flat B/W plateaus with
 // a Bayer ordered dither so faces keep their tonal modelling), firm
-// gutters, a slit sun sitting on the sea panel's horizon, code-drawn
-// palms, a print finishing pass (grain + vignette), then layered
+// gutters, a slit sun sitting on the sea panel's horizon, a print
+// finishing pass (grain + vignette), then layered
 // lettering: a sunset-gradient title with a double outline and a neon
 // script tagline (Mosaic instead gives its lettering a title band below
 // the grid, so all nine panels stay fully visible). Dark photos are
@@ -770,48 +770,6 @@ export function sunAnchor(state, shapes, w, h) {
   return { cx: w * 0.64, cy: h * 0.36, r };
 }
 
-/** A palm silhouette drawn from code: curved trunk, crown, drooping fronds.
- *  Drawn in unit coordinates (the context is scaled by `s` once), so all
- *  lengths here are fractions of the palm's height. */
-export function drawPalm(ctx, bx, by, s, flip, color) {
-  ctx.save();
-  ctx.translate(bx, by);
-  ctx.scale(flip ? -s : s, s);
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineCap = 'round';
-  // Trunk: a gentle S-curve rising from the base.
-  ctx.lineWidth = 0.06;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.quadraticCurveTo(0.06, -0.45, -0.05, -0.85);
-  ctx.stroke();
-  const cx = -0.05;
-  const cy = -0.85;
-  // Fronds: seven arcs fanning out of the crown, drooping hard at the tips.
-  for (let i = 0; i < 7; i++) {
-    const a = (-160 + i * 26) * (Math.PI / 180);
-    const len = 0.42 + 0.1 * Math.sin(i * 1.7);
-    const tx = cx + Math.cos(a) * len;
-    const ty = cy + Math.sin(a) * len * 0.62 + 0.26;
-    ctx.lineWidth = 0.038;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.quadraticCurveTo(
-      cx + Math.cos(a) * len * 0.55,
-      cy + Math.sin(a) * len * 0.45 - 0.1,
-      tx, ty,
-    );
-    ctx.stroke();
-  }
-  // Coconuts: two small dots under the crown.
-  ctx.beginPath();
-  ctx.arc(cx + 0.03, cy + 0.03, 0.035, 0, Math.PI * 2);
-  ctx.arc(cx - 0.04, cy + 0.045, 0.03, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
 // --- Print finishing ------------------------------------------------------
 
 let grainTile = null;
@@ -880,14 +838,17 @@ function drawTitle(ctx, w, title, noir, size, baseline) {
   ctx.lineJoin = 'round';
   const grad = ctx.createLinearGradient(0, baseline - size, 0, baseline + size * 0.12);
   if (noir) {
-    // Metallic silver: a bright face, a darker waist, a second sheen —
-    // the premium monochrome lettering of the classic crime cover, never
-    // flat white.
-    grad.addColorStop(0, '#ffffff');
-    grad.addColorStop(0.38, '#f2f2f2');
-    grad.addColorStop(0.62, '#a3a3a3');
-    grad.addColorStop(0.82, '#dedede');
-    grad.addColorStop(1, '#8a8a8a');
+    // Polished chrome: a lit crown, a hard bright band just above the
+    // middle, a sudden drop to the dark horizon line, then the reflected
+    // sheen below it and a deep base — the full chrome-lettering ramp of
+    // the classic crime cover, never flat white or plain silver.
+    grad.addColorStop(0, '#f8f8f8');
+    grad.addColorStop(0.3, '#cfcfcf');
+    grad.addColorStop(0.46, '#ffffff');
+    grad.addColorStop(0.52, '#6f6f6f');
+    grad.addColorStop(0.6, '#9a9a9a');
+    grad.addColorStop(0.78, '#e2e2e2');
+    grad.addColorStop(1, '#555555');
   } else {
     for (const [p, c] of TITLE_STOPS) grad.addColorStop(p, c);
   }
@@ -899,6 +860,15 @@ function drawTitle(ctx, w, title, noir, size, baseline) {
     ctx.strokeStyle = '#19e3ff';
     ctx.lineWidth = size * 0.16 + Math.max(3, size * 0.05);
     ctx.strokeText(title, w / 2, baseline);
+  } else {
+    // Edge depth for the chrome: a pale rim stroked a hair above the
+    // lettering first, so once the black outline and the chrome fill
+    // land on top of it, a bright bevel line survives along the top
+    // edge of every letter — the highlight a real chrome letter
+    // catches, and the depth a flat silver fill never has.
+    ctx.strokeStyle = 'rgba(235, 235, 235, 0.4)';
+    ctx.lineWidth = size * 0.16 + Math.max(3, size * 0.05);
+    ctx.strokeText(title, w / 2, baseline - size * 0.045);
   }
   ctx.strokeStyle = noir ? '#000000' : '#20082e';
   ctx.lineWidth = size * 0.16;
@@ -1020,8 +990,7 @@ export function drawPoster(canvas, state) {
   strokeGutters();
 
   // Decor: slit sun on the sea panel's horizon (see sunAnchor — never
-  // top-centre, where it sat on the middle subject's hat), palms framing
-  // the lower corners. The sun and its glow are clipped to the sea panel's
+  // top-centre, where it sat on the middle subject's hat). The sun and its glow are clipped to the sea panel's
   // own polygon, so neither can ever wash over a gutter into the next cell
   // (in the Grid's narrow satellites the disc is also sized and anchored
   // to keep a clear margin from the cell edges). Mosaic gets no sun: with
@@ -1037,18 +1006,6 @@ export function drawPoster(canvas, state) {
     ctx.restore();
     strokeGutters();
   }
-  const palmColor = 'rgba(10, 4, 18, 0.88)';
-  if (mosaic) {
-    // Palms frame the title band's lower corners, sized to the band, so
-    // they never reach up into the grid's bottom row.
-    const bandH = h - gridH;
-    drawPalm(ctx, w * 0.02, h * 0.995, bandH * 0.92, false, palmColor);
-    drawPalm(ctx, w * 0.99, h * 1.0, bandH * 0.78, true, palmColor);
-  } else {
-    drawPalm(ctx, w * 0.02, h * 0.99, h * 0.3, false, palmColor);
-    drawPalm(ctx, w * 0.99, h * 1.0, h * 0.25, true, palmColor);
-  }
-
   // Print finishing over the composite, before the lettering.
   applyFinishing(ctx, w, h);
 

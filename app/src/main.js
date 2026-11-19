@@ -11,8 +11,9 @@ const tagInput = document.getElementById('tagline');
 const zoomInput = document.getElementById('zoom');
 const zoomVal = document.getElementById('zoomVal');
 const panelLabel = document.getElementById('panelLabel');
+const panelPicks = document.getElementById('panelPicks');
 
-const SAMPLES = ['samples/boulevard.jpg', 'samples/pier.jpg', 'samples/convertible.jpg', 'samples/night.jpg', 'samples/marina.jpg'];
+const SAMPLES = ['samples/boulevard.jpg', 'samples/pier.jpg', 'samples/convertible.jpg', 'samples/night.jpg', 'samples/marina.jpg', 'samples/surfer.jpg'];
 
 const state = {
   layout: 'trio',
@@ -27,6 +28,14 @@ const state = {
     { src: SAMPLES[2], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
     { src: SAMPLES[3], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
     { src: SAMPLES[4], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
+    { src: SAMPLES[5], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
+    // Mosaic's second showings of the first three photos. The loader
+    // shares one Image per photo across these slots, so the renderer
+    // recognises the repeats and mirrors them; the tighter, higher
+    // framing here makes each repeat read as a different moment.
+    { src: SAMPLES[0], img: null, zoom: 1.29, ox: 0.3, oy: 0.62 },
+    { src: SAMPLES[1], img: null, zoom: 1.29, ox: 0.3, oy: 0.62 },
+    { src: SAMPLES[2], img: null, zoom: 1.29, ox: 0.3, oy: 0.62 },
   ],
 };
 
@@ -55,15 +64,36 @@ export function redraw() {
   syncPanelControls();
 }
 
+// The panel picker always carries exactly one button per cell of the
+// active layout (Solo 1, Duo 2, Trio 3, Grid 5, Mosaic 9), rebuilt
+// whenever the layout's cell count changes — the "Panel X of N" label
+// and the buttons can never disagree.
+let picksBuiltFor = 0;
+function buildPanelPicks(count) {
+  panelPicks.replaceChildren();
+  for (let i = 0; i < count; i++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'panel-pick';
+    b.textContent = `Panel ${i + 1}`;
+    b.addEventListener('click', () => {
+      state.active = i;
+      redraw();
+    });
+    panelPicks.appendChild(b);
+  }
+  picksBuiltFor = count;
+}
+
 function syncPanelControls() {
   const p = state.panels[state.active];
   const count = LAYOUTS[state.layout].panels;
+  if (picksBuiltFor !== count) buildPanelPicks(count);
   panelLabel.textContent = `Panel ${state.active + 1} of ${count}`;
   zoomInput.value = String(Math.round(p.zoom * 100));
   zoomVal.textContent = `${Math.round(p.zoom * 100)}%`;
-  document.querySelectorAll('.panel-pick').forEach((b, i) => {
-    b.disabled = i >= count;
-    b.classList.toggle('on', i === state.active && i < count);
+  panelPicks.querySelectorAll('.panel-pick').forEach((b, i) => {
+    b.classList.toggle('on', i === state.active);
   });
 }
 
@@ -72,9 +102,16 @@ function markReady() {
 }
 
 async function loadSamples() {
-  await Promise.all(state.panels.map(async (p) => {
-    if (!p.img) p.img = await loadImage(p.src);
+  // One Image per distinct photo, shared by every panel slot that uses
+  // it — the renderer tells a repeat showing from a first showing by
+  // image identity, and mirrors the repeats.
+  const bySrc = new Map();
+  await Promise.all([...new Set(state.panels.map((p) => p.src))].map(async (src) => {
+    bySrc.set(src, await loadImage(src));
   }));
+  state.panels.forEach((p) => {
+    if (!p.img) p.img = bySrc.get(p.src);
+  });
 }
 
 async function setPanelPhoto(i, src, img) {
@@ -113,13 +150,6 @@ document.querySelectorAll('[data-size]').forEach((b) => {
   b.addEventListener('click', () => {
     state.size = b.dataset.size;
     document.querySelectorAll('[data-size]').forEach((x) => x.classList.toggle('on', x === b));
-    redraw();
-  });
-});
-
-document.querySelectorAll('.panel-pick').forEach((b, i) => {
-  b.addEventListener('click', () => {
-    state.active = i;
     redraw();
   });
 });
