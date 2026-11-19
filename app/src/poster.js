@@ -8,7 +8,9 @@
 // posterized ramp to a smooth one at low luminance so shaded faces keep
 // their features, and Noir additionally breaks its flat B/W plateaus with
 // a Bayer ordered dither so faces keep their tonal modelling), firm
-// gutters, a slit sun sitting on the sea panel's horizon, a print
+// gutters, a slit sun sitting on the sea panel's horizon (in the Key Art
+// grade the sun is repainted along with the panels — a warm painted disc
+// with soft shadow bands and a thin ink outline), a print
 // finishing pass (grain + vignette), then layered
 // lettering: a sunset-gradient title with a double outline and a neon
 // script tagline (Mosaic instead gives its lettering a title band below
@@ -178,7 +180,17 @@ export const GRADES = {
     sun: '#ffd166',
     sunCore: '#fff3b0',
     sunStops: ['#fff3b0', '#ffd166', '#ff944c'],
-    ramp: [[0, [20, 11, 48]], [0.26, [128, 56, 116]], [0.5, [219, 92, 104]], [0.74, [255, 125, 68]], [1, [255, 224, 170]]],
+    // The sun is repainted in this grade (see drawSun): a warm painted
+    // disc with soft shadow bands and a thin ink outline, not the
+    // hard-slit clip-art disc of the graded classes.
+    paintedSun: true,
+    // The ramp's low end leans Vice again: the deepest stop is a saturated
+    // violet and the low-mid stop a true magenta, so painted shadows and
+    // backgrounds keep their purple-magenta depth instead of drifting
+    // orange-brown (sepia) under the warm sample photos. The mid and
+    // upper stops — the skin region — are untouched, so face modelling
+    // keeps exactly the quality the painted faces were tuned with.
+    ramp: [[0, [30, 10, 78]], [0.26, [148, 44, 134]], [0.5, [219, 92, 104]], [0.74, [255, 125, 68]], [1, [255, 224, 170]]],
     ease: [0.15, 0.85],
     protect: [0.04, 0.75],
     steps: 8,
@@ -862,13 +874,59 @@ export function drawSunGlow(ctx, cx, cy, r, grade) {
   ctx.restore();
 }
 
+/** The painted sun (Key Art only, via the grade's `paintedSun` flag): the
+ *  disc is repainted like the panels around it — a flat warm gradient in
+ *  the grade's own sun colours, crossed by SOFT shadow bands that widen
+ *  toward the base and feather into the paint at both edges (a deep warm
+ *  shade, never the hard skyTop bars of the slit sun), and finished with
+ *  a thin ink outline in the same plum-brown as the panel contours, so
+ *  the sun reads as part of the painting instead of a clip-art sticker
+ *  laid over it. The print grain pass runs over the whole composite
+ *  afterwards, which settles the disc into the surface for good. */
+export function drawPaintedSun(ctx, cx, cy, r, grade) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  const g = ctx.createLinearGradient(0, cy - r, 0, cy + r);
+  g.addColorStop(0, grade.sunStops[0]);
+  g.addColorStop(0.45, grade.sunStops[1]);
+  g.addColorStop(0.72, grade.sunStops[1]);
+  g.addColorStop(1, grade.sunStops[2]);
+  ctx.fillStyle = g;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  // Soft painted bands: [centre offset (× r, from cy), height (× r), alpha].
+  const bands = [[0.14, 0.1, 0.13], [0.36, 0.14, 0.17], [0.6, 0.19, 0.21], [0.85, 0.24, 0.25]];
+  for (const [off, bh, a] of bands) {
+    const y0 = cy + r * off - (r * bh) / 2;
+    const bg = ctx.createLinearGradient(0, y0, 0, y0 + r * bh);
+    bg.addColorStop(0, 'rgba(168, 52, 32, 0)');
+    bg.addColorStop(0.5, `rgba(168, 52, 32, ${a})`);
+    bg.addColorStop(1, 'rgba(168, 52, 32, 0)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(cx - r, y0, r * 2, r * bh);
+  }
+  ctx.restore();
+  // Thin ink outline, same family as the panel contour ink.
+  const ink = grade.painterly?.ink ?? [46, 20, 44];
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - Math.max(1, r * 0.028), 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(${ink[0]}, ${ink[1]}, ${ink[2]}, 0.55)`;
+  ctx.lineWidth = Math.max(1.5, r * 0.05);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Classic slit sun: a disc with a vertical grade gradient (a grade may
  *  carry a richer `sunGrad` — Noir's runs white -> light grey -> mid grey
  *  -> deep grey so the disc keeps real shading instead of reading as a
  *  flat white sticker — and soft-edged dark-grey slits via `sunSlitSoft`,
  *  instead of hard pure-black bars), cut by widening horizontal gaps
- *  toward the bottom. */
+ *  toward the bottom. A grade with `paintedSun` (Key Art) takes the
+ *  painted disc above instead. */
 export function drawSun(ctx, cx, cy, r, grade) {
+  if (grade.paintedSun) { drawPaintedSun(ctx, cx, cy, r, grade); return; }
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
