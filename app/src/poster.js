@@ -17,7 +17,10 @@
 // through untouched; very dark photos are lifted hard, under a highlight
 // shoulder that keeps lit signs from blowing out), and a photo shown
 // twice in one layout is mirrored on its later showings so the repeat
-// reads as a different moment.
+// reads as a different moment. The Key Art grade goes a class further:
+// its panels are painted, not just graded — an edge-aware softened base,
+// an eight-band cel ramp, drawn ink contours and a fine paper grain — so
+// a photo reads as hand-drawn key art instead of a filtered photograph.
 
 export const SIZES = {
   '1080x1080': [1080, 1080],
@@ -142,6 +145,46 @@ export const GRADES = {
     accent: '#f5b95e',
     tagText: '#0d0a24',
     scrim: '10, 7, 30',
+  },
+  keyart: {
+    // Key Art: the painted class. Where the other grades are gradient
+    // maps over the photograph, this one re-renders the photo as an
+    // illustration (see `painterly` and gradedPanelCanvas): the photo is
+    // first softened on an edge-aware base (downscaled and re-upscaled
+    // in repeated rounds — micro-detail and skin texture dissolve while the big
+    // shapes and hard contours survive), then mapped through a warm
+    // sunset-family ramp posterized to EIGHT cel bands whose transitions
+    // are smoothstepped, so colour areas read as flat, graded brush
+    // strokes. Shadow protection (like Noir/Ink) cross-fades the bands
+    // to the smooth ramp through the shadows, so faces keep their
+    // modelling as strokes instead of collapsing into plateaus. Over
+    // the graded paint, drawn contours: a Sobel pass over the softened
+    // base (computed at quarter resolution) inks only the STRONG edges
+    // — hair and jaw silhouettes, clothing folds, palm fronds, the
+    // horizon — in a warm dark plum-brown, with alpha proportional to
+    // edge strength; the softened base has already dissolved skin
+    // texture, and the high threshold keeps the ink off faces, whose
+    // shading gradients stay far below it. A fine paper grain finishes
+    // the panel. The auto-exposure lift applies as in every grade.
+    label: 'Key Art',
+    sky: ['#2b1055', '#7597de'],
+    skyTop: '#1c0b3d',
+    sun: '#ffd166',
+    sunCore: '#fff3b0',
+    sunStops: ['#fff3b0', '#ffd166', '#ff944c'],
+    ramp: [[0, [20, 11, 48]], [0.26, [128, 56, 116]], [0.5, [219, 92, 104]], [0.74, [255, 125, 68]], [1, [255, 224, 170]]],
+    ease: [0.15, 0.85],
+    protect: [0.04, 0.75],
+    steps: 8,
+    mix: 0.7,
+    painterly: {
+      scale: 0.45, passes: 3,
+      edgeScale: 0.25, edgeLo: 0.3, edgeHi: 0.58,
+      ink: [46, 20, 44], inkAlpha: 0.66,
+    },
+    accent: '#ff2e63',
+    tagText: '#1c0b3d',
+    scrim: '10, 4, 20',
   },
 };
 
@@ -547,6 +590,92 @@ function photoExposure(img) {
   return expo;
 }
 
+/** Key Art's edge-aware soft base (light version): the panel is drawn
+ *  down to `scale` and back up, `passes` times. Each round trip is a
+ *  resampling, not a box blur: photographic micro-detail — skin texture,
+ *  fabric weave, water sparkle — lives at the frequencies the small
+ *  canvas cannot hold and dissolves, while the big shapes and the hard
+ *  contours (a jaw against a neck, a hat against the sky) survive in
+ *  softened form, exactly the base a cel painter works from. */
+function softenBase(ctx, cw, ch, scale, passes) {
+  const sw = Math.max(1, Math.round(cw * scale));
+  const sh = Math.max(1, Math.round(ch * scale));
+  const small = document.createElement('canvas');
+  small.width = sw;
+  small.height = sh;
+  const sctx = small.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  for (let i = 0; i < passes; i++) {
+    sctx.drawImage(ctx.canvas, 0, 0, sw, sh);
+    ctx.drawImage(small, 0, 0, cw, ch);
+  }
+}
+
+/** Key Art's drawn contours: a Sobel pass over the softened base's
+ *  luminance (exposure lift applied, so a dark photo's contours count at
+ *  their lifted strength), computed at the painterly edge resolution —
+ *  a quarter of the panel — and returned as a small ink canvas to be
+ *  drawn back up over the graded paint; the upscaling softens the ink
+ *  into brush-width lines. Only strong edges are inked: alpha is zero
+ *  below `edgeLo` of the normalized gradient magnitude and ramps to
+ *  `inkAlpha` at `edgeHi`. Because the base was softened first, skin
+ *  carries no texture edges at all, and a face's own shading gradients
+ *  (cheek, brow) sit far below the threshold — what clears it is the
+ *  drawn outline of things: hair and jaw silhouettes, hat brims,
+ *  clothing folds, palm fronds, the sea's horizon. */
+function painterlyInkCanvas(px, cw, ch, expo, p) {
+  const es = p.edgeScale;
+  const ew = Math.max(2, Math.floor(cw * es));
+  const eh = Math.max(2, Math.floor(ch * es));
+  const lum = new Float32Array(ew * eh);
+  for (let y = 0; y < eh; y++) {
+    const sy = Math.min(ch - 1, Math.floor(y / es));
+    for (let x = 0; x < ew; x++) {
+      const sx = Math.min(cw - 1, Math.floor(x / es));
+      const o = (sy * cw + sx) * 4;
+      let r = px[o];
+      let g = px[o + 1];
+      let b = px[o + 2];
+      if (expo.lut) {
+        r = expo.lut[r];
+        g = expo.lut[g];
+        b = expo.lut[b];
+      }
+      lum[y * ew + x] = (r * 77 + g * 150 + b * 29) >> 8;
+    }
+  }
+  const out = document.createElement('canvas');
+  out.width = ew;
+  out.height = eh;
+  const octx = out.getContext('2d');
+  const id = octx.createImageData(ew, eh);
+  const od = id.data;
+  const [ir, ig, ib] = p.ink;
+  for (let y = 0; y < eh; y++) {
+    for (let x = 0; x < ew; x++) {
+      const xm = Math.max(0, x - 1);
+      const xp = Math.min(ew - 1, x + 1);
+      const ym = Math.max(0, y - 1);
+      const yp = Math.min(eh - 1, y + 1);
+      const gx = (lum[ym * ew + xp] + 2 * lum[y * ew + xp] + lum[yp * ew + xp])
+        - (lum[ym * ew + xm] + 2 * lum[y * ew + xm] + lum[yp * ew + xm]);
+      const gy = (lum[yp * ew + xm] + 2 * lum[yp * ew + x] + lum[yp * ew + xp])
+        - (lum[ym * ew + xm] + 2 * lum[ym * ew + x] + lum[ym * ew + xp]);
+      const mag = Math.sqrt(gx * gx + gy * gy) / 1020;
+      const a = smoothstep(p.edgeLo, p.edgeHi, mag) * p.inkAlpha;
+      if (a <= 0.004) continue;
+      const o = (y * ew + x) * 4;
+      od[o] = ir;
+      od[o + 1] = ig;
+      od[o + 2] = ib;
+      od[o + 3] = Math.round(255 * a);
+    }
+  }
+  octx.putImageData(id, 0, 0);
+  return out;
+}
+
 /** A panel's photo, drawn cover-fit into its own canvas and run through the
  *  grade's gradient map. Cached per (photo, grade, panel size, framing) so
  *  repeat renders and exports stay fast. */
@@ -575,6 +704,11 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
   ctx.drawImage(img, f.dx, f.dy, f.dw, f.dh);
   if (photo.flip) ctx.restore();
 
+  // Key Art paints from a softened base (see softenBase); every other
+  // grade grades the photograph exactly as drawn.
+  const painterly = (GRADES[gradeKey] ?? GRADES.sunset).painterly;
+  if (painterly) softenBase(ctx, cw, ch, painterly.scale, painterly.passes);
+
   const grade = GRADES[gradeKey] ?? GRADES.sunset;
   const mix = grade.mix;
   // Dark photos are exposure-lifted before grading (bright photos get a
@@ -582,6 +716,7 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
   const expo = photoExposure(img);
   let graded = null;
   let gate = null;
+  let inkCanvas = null;
   if (mix > 0) {
     const lut = gradeLUT(gradeKey);
     // Shadow protection (grades that carry `protect`: Noir, Poster Ink).
@@ -597,6 +732,10 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     // The halftone's gate map is measured on the photo as drawn, before
     // grading (and before the exposure lift) changes its detail.
     gate = grade.halftone ? halftoneGateMap(px, cw, ch) : null;
+    // Key Art's ink contours are measured on the softened base as drawn
+    // (before the grading loop rewrites these pixels), at quarter
+    // resolution — see painterlyInkCanvas.
+    if (painterly) inkCanvas = painterlyInkCanvas(px, cw, ch, expo, painterly);
     // Ordered dithering (grades that carry `dither`: Noir). The posterized
     // lookup is taken at a luminance perturbed by the pixel's Bayer
     // threshold, scaled by the grade's amplitude in tonal steps: inside a
@@ -650,6 +789,23 @@ export function gradedPanelCanvas(shape, photo, gradeKey) {
     graded = px;
   }
   if (grade.halftone && graded) applyHalftone(ctx, cw, ch, graded, grade, gate);
+  if (painterly && graded && inkCanvas) {
+    // The drawn contours go over the graded paint, drawn back up from
+    // their quarter-resolution canvas so the lines land at brush width
+    // with soft edges; then a whisper of the print-grain tile at panel
+    // level, so the paint itself carries paper texture under the
+    // poster's own finishing pass.
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(inkCanvas, 0, 0, cw, ch);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.drawImage(getGrainTile(), 0, 0, cw, ch);
+    ctx.restore();
+  }
 
   if (panelCache.size > 48) panelCache.delete(panelCache.keys().next().value);
   panelCache.set(key, canvas);
