@@ -26,7 +26,7 @@ const state = {
     { src: SAMPLES[1], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
     { src: SAMPLES[2], img: null, zoom: 1.1, ox: 0, oy: 0.55 },
     { src: SAMPLES[0], img: null, zoom: 1.35, ox: 0.3, oy: 0.4 },
-    { src: SAMPLES[1], img: null, zoom: 1.3, ox: -0.3, oy: 0.45 },
+    { src: SAMPLES[1], img: null, zoom: 1.02, ox: 0.3, oy: 1 },
   ],
 };
 

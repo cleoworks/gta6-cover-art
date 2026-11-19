@@ -43,8 +43,8 @@ export const GRADES = {
     sun: '#00f5ff',
     sunCore: '#d8fbff',
     sunStops: ['#d8fbff', '#00f5ff', '#0891b2'],
-    ramp: [[0, [5, 9, 20]], [0.3, [18, 58, 110]], [0.55, [122, 31, 162]], [0.78, [255, 46, 166]], [1, [165, 251, 255]]],
-    mix: 0.5,
+    ramp: [[0, [5, 9, 20]], [0.3, [18, 58, 110]], [0.55, [150, 74, 148]], [0.78, [236, 128, 142]], [1, [165, 251, 255]]],
+    mix: 0.36,
     accent: '#00f5ff',
     tagText: '#080614',
     scrim: '6, 2, 24',
@@ -68,7 +68,8 @@ export const GRADES = {
     skyTop: '#050505',
     sun: '#e8e8e8',
     sunCore: '#ffffff',
-    sunStops: ['#ffffff', '#d9d9d9', '#8f8f8f'],
+    sunStops: ['#ffffff', '#c9c9c9', '#6e6e6e'],
+    sunRim: 'rgba(235, 235, 235, 0.9)',
     ramp: [[0, [8, 8, 8]], [0.25, [56, 56, 56]], [0.5, [128, 128, 128]], [0.75, [198, 198, 198]], [1, [255, 255, 255]]],
     mix: 1,
     accent: '#f2f2f2',
@@ -288,9 +289,10 @@ export function drawSunGlow(ctx, cx, cy, r, grade) {
   ctx.restore();
 }
 
-/** Classic slit sun: a disc with a vertical grade gradient (in Noir this is
- *  what keeps the disc from reading flat), cut by widening horizontal gaps
- *  toward the bottom. */
+/** Classic slit sun: a disc with a vertical grade gradient (in Noir the
+ *  stops run white -> mid grey -> deep grey so the disc keeps its shading,
+ *  and a thin light rim lifts it off the sea texture behind it), cut by
+ *  widening horizontal gaps toward the bottom. */
 export function drawSun(ctx, cx, cy, r, grade) {
   ctx.save();
   ctx.beginPath();
@@ -310,6 +312,13 @@ export function drawSun(ctx, cx, cy, r, grade) {
     yy += gap + r * 0.16;
     gap *= 1.55;
   }
+  if (grade.sunRim) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - Math.max(1, r * 0.03), 0, Math.PI * 2);
+    ctx.strokeStyle = grade.sunRim;
+    ctx.lineWidth = Math.max(1.5, r * 0.05);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -325,12 +334,12 @@ const PIER_HORIZON = 0.345;
 const SUN_FX = {
   trio: { land: 0.685, sq: 0.58, port: 0.565 },
   duo: { land: 0.78, sq: 0.64, port: 0.6 },
-  grid: { land: 0.72, sq: 0.635, port: 0.78 },
+  grid: { land: 0.68, sq: 0.625, port: 0.78 },
 };
 const SUN_R = {
   trio: { land: 0.072, sq: 0.065, port: 0.065 },
   duo: { land: 0.072, sq: 0.065, port: 0.065 },
-  grid: { land: 0.07, sq: 0.058, port: 0.065 },
+  grid: { land: 0.062, sq: 0.05, port: 0.065 },
 };
 
 export function sunAnchor(state, shapes, w, h) {
@@ -561,7 +570,10 @@ export function drawPoster(canvas, state) {
 
   // Gutters: every panel edge gets the same firm dark gutter with a thin
   // light pinstripe — the hard lines between panels are the visual anchor.
-  if (shapes.length > 1) {
+  // The pass runs again after the sun is drawn, so the sun's glow (clipped
+  // to its own panel) can never tint a gutter line.
+  const strokeGutters = () => {
+    if (shapes.length < 2) return;
     for (const s of shapes) {
       tracePoly(ctx, s.poly);
       ctx.strokeStyle = 'rgba(8, 4, 18, 0.92)';
@@ -572,14 +584,23 @@ export function drawPoster(canvas, state) {
       ctx.lineWidth = Math.max(1.5, w * 0.0018);
       ctx.stroke();
     }
-  }
+  };
+  strokeGutters();
 
   // Decor: slit sun on the sea panel's horizon (see sunAnchor — never
   // top-centre, where it sat on the middle subject's hat), palms framing
-  // the lower corners.
+  // the lower corners. The sun and its glow are clipped to the sea panel's
+  // own polygon, so neither can ever wash over a gutter into the next cell
+  // (in the Grid's narrow satellites the disc is also sized and anchored
+  // to keep a clear margin from the cell edges).
   const spot = sunAnchor(state, shapes, w, h);
+  const sunPanel = state.layout === 'solo' ? shapes[0] : (shapes[1] ?? shapes[0]);
+  ctx.save();
+  if (sunPanel) { tracePoly(ctx, sunPanel.poly); ctx.clip(); }
   drawSunGlow(ctx, spot.cx, spot.cy, spot.r, grade);
   drawSun(ctx, spot.cx, spot.cy, spot.r, grade);
+  ctx.restore();
+  strokeGutters();
   const palmColor = 'rgba(10, 4, 18, 0.88)';
   drawPalm(ctx, w * 0.02, h * 0.99, h * 0.3, false, palmColor);
   drawPalm(ctx, w * 0.99, h * 1.0, h * 0.25, true, palmColor);

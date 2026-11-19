@@ -3,8 +3,8 @@
 //   ?shot=cover&layout=trio&grade=noir&size=1920x1080 — the exported PNG itself,
 //   shown full-bleed so the screenshot is the PNG the app wrote, scaled down.
 // `photo` picks the sample for panel 1 (samples/<photo>.jpg), `photo2` for
-// panel 2, `photo3` for panel 3; panels 4-5 reuse photos 1-2 with a tighter
-// crop. window.__shotReady is set once the scene is painted.
+// panel 2, `photo3` for panel 3; panel 4 re-crops photo 1 tighter, panel 5
+// re-crops photo 2 wider so the fisherman's whole head sits inside the cell. window.__shotReady is set once the scene is painted.
 import { GRADES, LAYOUTS, SIZES } from './poster.js';
 
 export async function runShot(shot, query, helpers) {
@@ -32,7 +32,7 @@ export async function runShot(shot, query, helpers) {
   put(1, second, imgB);
   put(2, third, imgC);
   put(3, first, imgA, { zoom: 1.35, ox: 0.3, oy: 0.4 });
-  put(4, second, imgB, { zoom: 1.3, ox: -0.3, oy: 0.45 });
+  put(4, second, imgB, { zoom: 1.02, ox: 0.3, oy: 1 });
 
   // Keep the editor controls in sync with the scene's choices.
   document.querySelectorAll('[data-layout]').forEach((b) => b.classList.toggle('on', b.dataset.layout === state.layout));
