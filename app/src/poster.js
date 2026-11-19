@@ -164,7 +164,13 @@ export const GRADES = {
     // horizon — in a warm dark plum-brown, with alpha proportional to
     // edge strength; the softened base has already dissolved skin
     // texture, and the high threshold keeps the ink off faces, whose
-    // shading gradients stay far below it. A fine paper grain finishes
+    // shading gradients stay far below it. The ink is laid in TWO
+    // tiers: the soft pass above, whose alpha tops out well under
+    // full strength, and a second coat reserved for the strongest
+    // contours (edgeStrong*), which brings those outlines close to
+    // full ink so the drawn contour actually reads at full-frame
+    // scale — a single soft coat left the silhouettes as little more
+    // than a darker shading gradient. A fine paper grain finishes
     // the panel. The auto-exposure lift applies as in every grade.
     label: 'Key Art',
     sky: ['#2b1055', '#7597de'],
@@ -181,6 +187,7 @@ export const GRADES = {
       scale: 0.45, passes: 3,
       edgeScale: 0.25, edgeLo: 0.3, edgeHi: 0.58,
       ink: [46, 20, 44], inkAlpha: 0.66,
+      edgeStrongLo: 0.38, edgeStrongHi: 0.48, inkAlphaStrong: 1,
     },
     accent: '#ff2e63',
     tagText: '#1c0b3d',
@@ -617,13 +624,21 @@ function softenBase(ctx, cw, ch, scale, passes) {
  *  their lifted strength), computed at the painterly edge resolution —
  *  a quarter of the panel — and returned as a small ink canvas to be
  *  drawn back up over the graded paint; the upscaling softens the ink
- *  into brush-width lines. Only strong edges are inked: alpha is zero
- *  below `edgeLo` of the normalized gradient magnitude and ramps to
- *  `inkAlpha` at `edgeHi`. Because the base was softened first, skin
- *  carries no texture edges at all, and a face's own shading gradients
- *  (cheek, brow) sit far below the threshold — what clears it is the
- *  drawn outline of things: hair and jaw silhouettes, hat brims,
- *  clothing folds, palm fronds, the sea's horizon. */
+ *  into brush-width lines. The ink is two-tiered. The SOFT tier inks
+ *  only strong edges: alpha is zero below `edgeLo` of the normalized
+ *  gradient magnitude and ramps to `inkAlpha` at `edgeHi`. Because the
+ *  base was softened first, skin carries no texture edges at all, and a
+ *  face's own shading gradients (cheek, brow) sit far below the
+ *  threshold — what clears it is the drawn outline of things: hair and
+ *  jaw silhouettes, hat brims, clothing folds, palm fronds, the sea's
+ *  horizon. The STRONG tier is a second coat over the same ink colour,
+ *  reserved for the strongest contours of all: it starts far above the
+ *  soft tier's floor (`edgeStrongLo`) and ramps to `inkAlphaStrong`,
+ *  composited over the soft alpha, so a true silhouette — hair against
+ *  sky, a jaw against a neck, a palm frond against the sunset — lands
+ *  close to full-strength ink and the contour reads as drawn at
+ *  full-frame scale, while face shading, which never reaches even the
+ *  soft floor, stays untouched by either coat. */
 function painterlyInkCanvas(px, cw, ch, expo, p) {
   const es = p.edgeScale;
   const ew = Math.max(2, Math.floor(cw * es));
@@ -663,7 +678,14 @@ function painterlyInkCanvas(px, cw, ch, expo, p) {
       const gy = (lum[yp * ew + xm] + 2 * lum[yp * ew + x] + lum[yp * ew + xp])
         - (lum[ym * ew + xm] + 2 * lum[ym * ew + x] + lum[ym * ew + xp]);
       const mag = Math.sqrt(gx * gx + gy * gy) / 1020;
-      const a = smoothstep(p.edgeLo, p.edgeHi, mag) * p.inkAlpha;
+      const aSoft = smoothstep(p.edgeLo, p.edgeHi, mag) * p.inkAlpha;
+      const aStrong = p.edgeStrongHi
+        ? smoothstep(p.edgeStrongLo, p.edgeStrongHi, mag) * p.inkAlphaStrong
+        : 0;
+      // The strong coat composites OVER the soft one (source-over), so
+      // the strongest contours approach full ink without the two
+      // alphas ever summing past it.
+      const a = aSoft + aStrong * (1 - aSoft);
       if (a <= 0.004) continue;
       const o = (y * ew + x) * 4;
       od[o] = ir;

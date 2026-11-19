@@ -25,35 +25,42 @@ html, body { margin: 0; min-height: 100%; background: #0d0716; color: #f2ecff; f
 
 .app { display: flex; gap: 28px; align-items: flex-start; justify-content: center; min-height: 100vh; padding: 22px; }
 
-.controls { display: flex; flex-direction: column; gap: 9px; width: 320px; flex: none; }
+.controls { display: flex; flex-direction: column; gap: 6px; width: 320px; flex: none; }
 .controls h1 {
   margin: 0;
   font-family: 'Anton', 'Arial Black', sans-serif;
-  font-size: 36px;
+  font-size: 29px;
+  line-height: 1.15;
   letter-spacing: 1px;
   background: linear-gradient(180deg, #fff7ae, #ff7b00 70%, #ff2e63);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-.sub { margin: 4px 0 0; color: #b9aed6; }
+.sub { margin: 3px 0 0; color: #b9aed6; font-size: 13px; }
 .fine { margin: 0; color: #8d83a8; font-size: 12px; }
-.hint { margin: 0; color: #b9aed6; font-size: 13px; }
+.hint { margin: 0; color: #b9aed6; font-size: 12px; }
 
-fieldset { margin: 0; padding: 10px; border: 1px solid #3a2d5c; border-radius: 10px; background: #150d26; }
+fieldset { margin: 0; padding: 8px; border: 1px solid #3a2d5c; border-radius: 10px; background: #150d26; }
 legend { padding: 0 6px; font-weight: 700; color: #ffd166; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; margin: 3px 0; }
+/* Compact button grids: the panel picker always shows three buttons per
+   row (so Mosaic's nine picks take exactly three rows) and the sample
+   buttons pair up, keeping the whole control column — framing controls
+   included — inside one screen height. */
+#panelPicks .panel-pick { flex: 1 1 30%; }
+[data-sample] { flex: 1 1 44%; }
 
-label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
 input[type=text] {
-  font: inherit; padding: 9px 10px; border: 1px solid #4a3a72; border-radius: 8px;
+  font: inherit; padding: 7px 9px; border: 1px solid #4a3a72; border-radius: 8px;
   background: #0d0716; color: #fff;
 }
 input[type=text]:focus, button:focus-visible, input[type=file]:focus-visible { outline: 2px solid #00f5ff; outline-offset: 2px; }
 input[type=range] { width: 100%; accent-color: #ff2e63; }
 
 button {
-  font: inherit; font-weight: 700; padding: 8px 11px; border: 1px solid #4a3a72; border-radius: 8px;
+  font: inherit; font-size: 14px; font-weight: 700; padding: 6px 9px; border: 1px solid #4a3a72; border-radius: 8px;
   background: #221741; color: #f2ecff; cursor: pointer;
 }
 button:hover { border-color: #ff2e63; }
@@ -71,12 +78,12 @@ input[type=file] { font: inherit; font-weight: 400; }
 
 button.export {
   flex: 1;
-  padding: 13px; font-size: 17px; background: linear-gradient(90deg, #ff7b00, #ff2e63);
+  padding: 10px; font-size: 15px; background: linear-gradient(90deg, #ff7b00, #ff2e63);
   border: 0; color: #fff; box-shadow: 0 4px 24px rgba(255, 46, 99, 0.45);
 }
 button.export.alt {
   background: #221741; border: 1px solid #ff2e63; color: #ffd7e6;
-  box-shadow: none; font-size: 15px;
+  box-shadow: none; font-size: 14px;
 }
 button.export:hover { filter: brightness(1.1); }
 

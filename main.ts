@@ -12,7 +12,10 @@
 // lettering sits in a title band below its nine panels), a colour grade
 // (Sunset, Neon Nights, Palm Gold, Noir, Poster Ink — all gradient-mapped,
 // Poster Ink with a highlight-masked halftone, Noir with an ordered Bayer
-// dither through its posterize) and a post size, type a title
+// dither through its posterize — and Key Art, which paints instead of
+// grading: an edge-aware softened base, an eight-band cel ramp and two
+// coats of drawn Sobel ink contours, the second reserved for the strongest
+// edges) and a post size, type a title
 // and a tagline, and export a PNG (one size, or all three at once).
 // Its six sample photos (app/samples/) were made for make.fun with an
 // image model and are free to use: three bright Vice scenes, one neon
