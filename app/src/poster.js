@@ -140,6 +140,22 @@ export function drawSun(ctx, cx, cy, r, grade) {
   ctx.restore();
 }
 
+/** Where the slit sun sits, per layout: centre as a fraction of the canvas
+ *  size, radius as a fraction of the shorter side. Portrait panels put the
+ *  subject's head in each panel's top-centre, so the old top-centre sun
+ *  landed square on the middle subject's hat like a badge. These spots sit
+ *  in open sky/water instead: over the sea in the pier panel for trio and
+ *  duo (right of that panel's subject), and in the top-right sky for solo.
+ *  Trio frames its sea higher in landscape than in square/portrait, so the
+ *  trio spot follows the canvas aspect. */
+export function sunSpot(layout, w, h) {
+  if (layout === 'duo') return { x: 0.865, y: 0.5, r: 0.048 };
+  if (layout === 'solo') return { x: 0.885, y: 0.115, r: 0.05 };
+  return w > h
+    ? { x: 0.638, y: 0.435, r: 0.045 }
+    : { x: 0.615, y: 0.485, r: 0.045 };
+}
+
 /** A palm silhouette drawn from code: curved trunk, crown, drooping fronds.
  *  Drawn in unit coordinates (the context is scaled by `s` once), so all
  *  lengths here are fractions of the palm's height. */
@@ -257,9 +273,11 @@ export function drawPoster(canvas, state) {
     }
   }
 
-  // Decor: slit sun tucked high at top centre, above the faces' eye line,
-  // palms framing the lower corners.
-  drawSun(ctx, w * 0.5, h * 0.075, Math.min(w, h) * 0.07, grade);
+  // Decor: slit sun in its layout's open-water/sky spot (see sunSpot —
+  // never top-centre, where it sat on the middle subject's hat), palms
+  // framing the lower corners.
+  const spot = sunSpot(state.layout, w, h);
+  drawSun(ctx, w * spot.x, h * spot.y, Math.min(w, h) * spot.r, grade);
   const palmColor = 'rgba(10, 4, 18, 0.88)';
   drawPalm(ctx, w * 0.02, h * 0.99, h * 0.3, false, palmColor);
   drawPalm(ctx, w * 0.99, h * 1.0, h * 0.25, true, palmColor);
