@@ -93,6 +93,20 @@ export const GRADES = {
     // `titleStops`/`titleRim` give the lettering the winners' sunset
     // family — cream -> gold -> orange inside a deep plum outline —
     // instead of the synthwave violet-pink and cyan rim.
+    //
+    // Round 12 strengthens the skin taming once more (`skinTame`): the
+    // pier portrait's sunlit cheek, forehead and forearm still read
+    // tangerine after round 11 — its brightest skin sat behind the
+    // detector's brightness gate, which existed to keep pale sky out,
+    // and the moderation floors were too gentle to pull the ramp's
+    // orange back off it. The gate now opens later (bright warm
+    // surfaces that lead with red are skin far more often than sky in
+    // these panels — true sky fails the red-lead test anyway), the
+    // saturation band reaches higher, and both moderation floors drop
+    // further, so detected skin keeps much more of the photo's own
+    // colour. The heroine's modelling sits in the same detector, so
+    // her measured skin saturation is re-checked against round 11
+    // whenever these numbers move.
     label: 'Blockbuster',
     sky: ['#2b1055', '#7597de'],
     skyTop: '#1c0b3d',
@@ -104,6 +118,7 @@ export const GRADES = {
     mix: 0.55,
     enrich: { sat: 1.24, curve: 0.16 },
     skinProtect: true,
+    skinTame: { mix: 0.72, sat: 0.92, bright: [0.93, 0.995], satHi: [0.58, 0.78], rgHi: [0.55, 0.7] },
     harmonize: true,
     glowSun: true,
     titleStops: [[0, '#fff7dc'], [0.34, '#ffd166'], [0.68, '#ff944c'], [1, '#ff6a2a']],
@@ -872,6 +887,21 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
     // sky, whose ratios mimic skin, at full grade. Grades without
     // the flag never enter the branch and render exactly as before.
     const skinOn = !!grade.skinProtect;
+    // How hard detected skin is tamed (round 12, `skinTame` on the
+    // grade): the share of the mix and of the saturation lift that a
+    // full-weight skin pixel gives back, plus the detector's widened
+    // gates — the brightness ceiling (above it, warm surfaces were
+    // assumed sky), the saturation band's upper fade, and the
+    // red-green gap ceiling: magenta-lit skin (the pier portrait's
+    // pink rim light) runs a wide red-green gap that the old ceiling
+    // mistook for fire or foliage and left half-graded. Grades that
+    // carry skinProtect without skinTame keep the round-11
+    // numbers exactly.
+    const tameMix = grade.skinTame?.mix ?? 0.44;
+    const tameSat = grade.skinTame?.sat ?? 0.62;
+    const tameBright = grade.skinTame?.bright ?? [0.9, 0.98];
+    const tameSatHi = grade.skinTame?.satHi ?? [0.55, 0.75];
+    const tameRgHi = grade.skinTame?.rgHi ?? [0.42, 0.55];
     for (let y = 0; y < ch; y++) {
       const rowBase = y * cw;
       const bayerRow = BAYER8[y & 7];
@@ -915,15 +945,15 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
           let wgt = 0;
           if (r > g && r > b && mx > 40) {
             const sat = (mx - mn) / mx;
-            wgt = smoothstep(0.1, 0.22, sat) * (1 - smoothstep(0.55, 0.75, sat))
+            wgt = smoothstep(0.1, 0.22, sat) * (1 - smoothstep(tameSatHi[0], tameSatHi[1], sat))
               * smoothstep(0.06, 0.16, (r - b) / 255)
-              * (1 - smoothstep(0.42, 0.55, (r - g) / 255))
-              * (1 - smoothstep(0.9, 0.98, mx / 255))
+              * (1 - smoothstep(tameRgHi[0], tameRgHi[1], (r - g) / 255))
+              * (1 - smoothstep(tameBright[0], tameBright[1], mx / 255))
               * smoothstep(30, 70, mx);
           }
           if (wgt > 0) {
-            mixP = mix * (1 - 0.44 * wgt);
-            satP = 1 + (eSat - 1) * (1 - 0.62 * wgt);
+            mixP = mix * (1 - tameMix * wgt);
+            satP = 1 + (eSat - 1) * (1 - tameSat * wgt);
           }
         }
         let nr = r + (tr - r) * mixP;
@@ -1288,15 +1318,21 @@ function applyFinishing(ctx, w, h) {
 
 const REVIEW_QUOTE = '"PURE VICE HEAT"';
 const REVIEW_SOURCE = 'THE STRIP GAZETTE';
+// The banner strip's centre line: a second beat of the cover's own
+// world, NOT the script tagline repeated in capitals — the strip used
+// to spend its loudest line saying the same words the script had just
+// said above it. This one counts the poster's five faces and closes
+// the story the tagline opens.
+const BANNER_LINE = 'FIVE FACES — ONE COAST — NO WAY BACK';
 const MICROTEXT = 'VICE COVER STUDIO — SHOT ON YOUR OWN CAMERA — GRADED BY HAND — NO PHOTO LEAVES THIS MACHINE — CAT. NO. VC-2026-001';
 
 // Caption chips for the Grid's five panels, in panel order — the
-// bundled scenes: the boulevard hero, the pier fisherman, the
-// convertible driver, the night portrait, the marina portrait.
+// bundled scenes: the boulevard hero, the pier fisherman, the palm
+// causeway at last light, the neon walking street, the marina portrait.
 const PANEL_CAPTIONS = [
   ['PALMERA BOULEVARD', '6:47 PM — SHE RUNS THIS STRIP'],
   ['HARROW PIER', '5:58 AM — FIRST CAST'],
-  ['COASTLINE RUN', '7:15 PM — TOP DOWN, NO BRAKES'],
+  ['PALMERA CAUSEWAY', '7:02 PM — THE LONG WAY HOME'],
   ['NEON DISTRICT', '11:48 PM — AFTER DARK'],
   ['MARINA DEL FARO', '8:03 PM — SMILING AT THE STORM'],
 ];
@@ -1509,8 +1545,9 @@ function drawPalmSilhouette(ctx, x, baseY, height, lean) {
 /** The banner strip along the poster's foot: a full design band, not
  *  a footnote — a tall sunset strip carrying a row of large palm
  *  silhouettes whose crowns rise past the band's top edge, an EST.
- *  2026 chip at the left, the tagline in heavy letterspaced capitals
- *  at the centre and a substantial drawn barcode block at the right —
+ *  2026 chip at the left, the cover's second beat in heavy
+ *  letterspaced capitals at the centre and a substantial drawn
+ *  barcode block at the right —
  *  the full bottom furniture of a printed one-sheet, at the same
  *  visual weight the winning covers give theirs. */
 function drawBannerStrip(ctx, w, h, state) {
@@ -1570,12 +1607,12 @@ function drawBannerStrip(ctx, w, h, state) {
   ctx.font = `${Math.round(bcH * 0.22)}px "Bebas Neue", sans-serif`;
   ctx.fillStyle = '#14100c';
   ctx.fillText('VC·2026', bcX + bcW / 2, bcY + bcH * 0.9);
-  // Centre line: the tagline (or title) in heavy letterspaced
-  // capitals, fitted to the space BETWEEN the chip and the barcode
-  // and centred in that span — on a narrow canvas the height-scaled
-  // chip and barcode would otherwise eat the line's first and last
-  // letters.
-  const line = ((state.tagline || '').trim() || (state.title || '').trim() || 'VICE HEAT').toUpperCase();
+  // Centre line: the cover's second beat (see BANNER_LINE) in heavy
+  // letterspaced capitals, fitted to the space BETWEEN the chip and
+  // the barcode and centred in that span — on a narrow canvas the
+  // height-scaled chip and barcode would otherwise eat the line's
+  // first and last letters.
+  const line = BANNER_LINE;
   const midL = estX + estW + w * 0.02;
   const midR = bcX - w * 0.02;
   let size = Math.round(sh * 0.54);
@@ -1616,7 +1653,14 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
   }
   if (state.layout === 'grid') {
     drawPanelChips(ctx, shapes, w, h);
-    if (w > h) drawSeal(ctx, shapes[1].x, h * 0.325, minSide * 0.082, -0.2);
+    // Landscape Grid: the seal rides the causeway panel's sea, upper
+    // left inside the panel — open water with no subject in reach.
+    // It used to sit on the gutter beside the pier panel, and its
+    // right-hand spikes pressed the fisherman's bare shoulder: a
+    // sticker may cross a gutter, but it may never touch skin or
+    // clothing, and the sea in the scene panel is the one patch of
+    // guaranteed dead space on the whole cover.
+    if (w > h) drawSeal(ctx, shapes[2].x + shapes[2].w * 0.22, shapes[2].y + shapes[2].h * 0.32, minSide * 0.082, -0.2);
     else if (w < h) drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
     else drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
   } else if (state.layout === 'duo') {
@@ -1730,9 +1774,9 @@ function drawTagline(ctx, w, h, rawTag, noir, titleBox, opts = {}) {
   if (!tag) return;
   const cx = opts.cx ?? w / 2;
   const family = '"Yellowtail", "Bebas Neue", cursive';
-  const start = titleBox ? titleBox.size * 0.5 : h * 0.062;
+  const start = opts.start ?? (titleBox ? titleBox.size * 0.5 : h * 0.062);
   const size = fitFont(ctx, tag, opts.maxW ?? w * 0.86, start, family);
-  const baseline = titleBox ? titleBox.baseline + titleBox.size * 0.6 : h * 0.955;
+  const baseline = opts.baseline ?? (titleBox ? titleBox.baseline + titleBox.size * 0.6 : h * 0.955);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   if (noir) {
@@ -1886,26 +1930,52 @@ export function drawPoster(canvas, state) {
     ctx.fillRect(0, h * 0.52, w, h * 0.48);
     if (title) {
       // The dressed Grid in landscape carries its own lettering
-      // geometry: the title block is centred on the HERO panel and
-      // fitted to the hero's span, so the lettering lives over the
-      // hero and her car — never across the gutter over a satellite
-      // (the centred stack used to bury the night panel's whole face
-      // under the title and the review pill). The stack also rides
-      // higher than before, because the banner strip below it is a
-      // full design band now, not a footnote strip.
-      const heroCx = (dressed && state.layout === 'grid' && w > h)
+      // geometry — and since round 12 it is a BAND, the way the
+      // winning covers set theirs: the title is fitted to two-thirds
+      // of the frame's width and centred at 0.36w, so it strides from
+      // the hero's left edge across the gutter into the foot of the
+      // satellite column, at a size the hero alone could never hold.
+      // The stack is budgeted against the fixed furniture: glyph tops
+      // clear every face on the cover (the heroine's chin sits well
+      // above the band), the script rides its own line just above the
+      // banner strip, and the marina panel — the one satellite with a
+      // face in the band's path — is never reached: the band ends at
+      // ~0.69w, short of her panel's left edge. Every other scene
+      // keeps the round-11 geometry exactly: the title block centred
+      // on the HERO panel and fitted to the hero's span, so the
+      // lettering lives over the hero and her car — never across the
+      // gutter over a satellite (the centred stack used to bury the
+      // night panel's whole face under the title and the review
+      // pill). The stack also rides higher than the undressed one,
+      // because the banner strip below it is a full design band now,
+      // not a footnote strip.
+      const bandTitle = dressed && state.layout === 'grid' && w > h;
+      const heroCx = (!bandTitle && dressed && state.layout === 'grid' && w > h)
         ? shapes[0].x + shapes[0].w / 2
         : null;
-      const size = fitFont(ctx, title, heroCx != null ? w * 0.64 : w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
-      titleBox = drawTitle(ctx, w, title, noir, size, dressed ? h * 0.752 : h * 0.865,
-        { cx: heroCx ?? w / 2, stops: grade.titleStops, rim: grade.titleRim });
+      const size = bandTitle
+        ? fitFont(ctx, title, w * 0.665, h * 0.34, 'Anton, "Arial Black", sans-serif')
+        : fitFont(ctx, title, heroCx != null ? w * 0.64 : w * 0.94, h * 0.17, 'Anton, "Arial Black", sans-serif');
+      titleBox = drawTitle(ctx, w, title, noir, size,
+        bandTitle ? h * 0.745 : (dressed ? h * 0.752 : h * 0.865),
+        { cx: bandTitle ? w * 0.36 : (heroCx ?? w / 2), stops: grade.titleStops, rim: grade.titleRim });
+      titleBox.band = bandTitle;
     }
   }
   const tag = (state.tagline || '').trim();
   if (tag) {
     const heroTagged = titleBox && titleBox.cx != null && titleBox.cx !== w / 2;
+    // The band title's script gets its own line and its own size:
+    // the shared formula (baseline a fixed share of the title's size
+    // below the title) was budgeted for a hero-scale title — at band
+    // scale it would push the script through the banner strip. Here
+    // the script starts smaller and lands on a fixed line just above
+    // the strip, kissing the title's lower outline the way the
+    // winners' scripts ride their titles.
     drawTagline(ctx, w, h, tag, noir, titleBox,
-      heroTagged ? { cx: titleBox.cx, maxW: w * 0.52 } : {});
+      titleBox && titleBox.band
+        ? { cx: titleBox.cx, maxW: w * 0.52, start: titleBox.size * 0.42, baseline: h * 0.862 }
+        : (heroTagged ? { cx: titleBox.cx, maxW: w * 0.52 } : {}));
   }
 
   // Poster dressing: seal, rating row, panel chips, banner strip and

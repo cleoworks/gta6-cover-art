@@ -46,9 +46,22 @@ export async function runShot(shot, query, helpers) {
   const heroFrame = (state.layout === 'grid' && state.grade === 'blockbuster')
     ? { zoom: 1.22, oy: 0.9 }
     : undefined;
+  // The Blockbuster Grid showcase's two scene panels get their own
+  // framings, for the same reason the hero does: the causeway photo
+  // is a wide sunset slice whose money is split between the sea on
+  // its left and the palm over the road on its right — the default
+  // centred crop keeps mostly palm and road, so the showcase pans
+  // toward the sea, which is also where the poster's seal rides
+  // (open water, no subject). The neon street keeps the centred
+  // crop: its signs and crowd already fill the slice evenly. Any
+  // other scene keeps the renderer's default framing exactly.
+  const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
+  const coastFrame = (showcaseScene && third.endsWith('coast.jpg'))
+    ? { ox: 0.55 }
+    : undefined;
   put(0, first, imgA, heroFrame);
   put(1, second, imgB);
-  put(2, third, imgC);
+  put(2, third, imgC, coastFrame);
   put(3, fourth, imgD);
   put(4, fifth, imgE);
   put(5, sixth, imgF);

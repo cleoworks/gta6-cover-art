@@ -25,7 +25,7 @@ html, body { margin: 0; min-height: 100%; background: #0d0716; color: #f2ecff; f
 
 .app { display: flex; gap: 28px; align-items: flex-start; justify-content: center; min-height: 100vh; padding: 22px; }
 
-.controls { display: flex; flex-direction: column; gap: 4px; width: 320px; flex: none; }
+.controls { display: flex; flex-direction: column; gap: 3px; width: 320px; flex: none; }
 .controls h1 {
   margin: 0;
   font-family: 'Anton', 'Arial Black', sans-serif;
@@ -41,15 +41,18 @@ html, body { margin: 0; min-height: 100%; background: #0d0716; color: #f2ecff; f
 .fine { margin: 0; color: #8d83a8; font-size: 12px; }
 .hint { margin: 0; color: #b9aed6; font-size: 12px; }
 
-fieldset { margin: 0; padding: 6px 8px; border: 1px solid #3a2d5c; border-radius: 10px; background: #150d26; }
+fieldset { margin: 0; padding: 5px 8px; border: 1px solid #3a2d5c; border-radius: 10px; background: #150d26; }
 legend { padding: 0 6px; font-weight: 700; color: #ffd166; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; }
 /* Compact button grids: the panel picker always shows three buttons per
    row (so Mosaic's nine picks take exactly three rows) and the sample
    buttons pair up, keeping the whole control column — framing controls
-   included — inside one screen height. */
+   included — inside one screen height. The sample buttons run a size
+   smaller and tighter, so every label — the two scene samples added
+   in round 12 included — fits on one line and the column keeps its
+   one-screen budget. */
 #panelPicks .panel-pick { flex: 1 1 30%; }
-[data-sample] { flex: 1 1 44%; }
+[data-sample] { flex: 1 1 44%; font-size: 13px; padding: 5px 6px; }
 
 label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
 input[type=text] {
