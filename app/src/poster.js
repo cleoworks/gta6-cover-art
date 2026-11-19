@@ -86,10 +86,14 @@ export const GRADES = {
     // The ramp's floor is lifted and its shadow stops are widened, and the
     // grade carries shadow protection (see `protect` in gradedPanelCanvas):
     // a hard six-step posterize over a monochrome ramp used to crush
-    // shadowed faces into a single grey plateau.
-    ramp: [[0, [26, 26, 26]], [0.22, [74, 74, 74]], [0.45, [130, 130, 130]], [0.7, [192, 192, 192]], [1, [255, 255, 255]]],
+    // shadowed faces into a single grey plateau. The protect band reaches
+    // well into the low midtones and the two darkest stops sit a touch
+    // higher still: the hard-edged shadow a hat brim throws across a face
+    // lives exactly in that band, and softening its cross-fade there is
+    // what keeps the brim line from printing as a stripe over the eyes.
+    ramp: [[0, [34, 34, 34]], [0.22, [84, 84, 84]], [0.45, [130, 130, 130]], [0.7, [192, 192, 192]], [1, [255, 255, 255]]],
     ease: [0.2, 0.8],
-    protect: [0.05, 0.55],
+    protect: [0.04, 0.72],
     mix: 1,
     accent: '#f2f2f2',
     tagText: '#0a0a0a',
@@ -109,10 +113,16 @@ export const GRADES = {
     // The ink floor is lifted (deep indigo, not near-black) and the warm
     // terracotta stop arrives earlier, with shadow protection like Noir:
     // at four firm steps a backlit face otherwise falls entirely into the
-    // darkest plateau and its features drown.
-    ramp: [[0, [40, 32, 78]], [0.22, [78, 58, 128]], [0.42, [198, 104, 86]], [0.7, [242, 170, 96]], [1, [250, 236, 204]]],
+    // darkest plateau and its features drown. The protection reaches
+    // further up the low midtones than a plain shadow fade and the two
+    // darkest stops are lifted again, because a hat brim's shadow prints
+    // as a hard horizontal band across the eyes at exactly that luminance
+    // — the wider cross-fade melts the band's lower edge and the lifted
+    // floor raises the eye zone out of the darkest ink, while sky, hat
+    // and sea (brighter or fully shadowed) keep their firm print steps.
+    ramp: [[0, [52, 42, 94]], [0.22, [90, 70, 140]], [0.42, [198, 104, 86]], [0.7, [242, 170, 96]], [1, [250, 236, 204]]],
     ease: [0.26, 0.74],
-    protect: [0.04, 0.6],
+    protect: [0.03, 0.78],
     mix: 0.88,
     steps: 4,
     halftone: true,
@@ -440,6 +450,15 @@ const panelCache = new Map(); // graded panel canvases, keyed by photo+grade+fra
 // separates them cleanly.
 const EXPO_GATE = 0.33;
 
+// Below this mean a photo is not just dim but very dark (the night
+// portrait, at 0.236, is the bundled case): the gate band's gentle slope
+// leaves its faces a notch too dark, so very dark photos get a stronger
+// gamma whose value continues the gate band's curve at the threshold,
+// plus a soft highlight shoulder — a plain strong gamma would push lit
+// neon signs up into one clipped plateau, while the shoulder keeps their
+// separation and the night keeps its mood.
+const EXPO_VERY_DARK = 0.26;
+
 function photoExposure(img) {
   if (img.__vcExpo) return img.__vcExpo;
   let expo = { lut: null };
@@ -456,10 +475,24 @@ function photoExposure(img) {
     }
     const mean = sum / (d.length / 4) / 255;
     if (mean < EXPO_GATE) {
-      const strength = (EXPO_GATE - mean) / EXPO_GATE;
-      const gamma = 1 - 0.55 * strength;
+      let gamma;
+      let shoulder = false;
+      if (mean < EXPO_VERY_DARK) {
+        // Very dark: continue from the gate band's gamma at the 0.26
+        // threshold (0.883) and steepen the lift from there, floored so
+        // a near-black photo is lifted hard but never solarized.
+        gamma = Math.max(0.68, 0.883 - 5 * (EXPO_VERY_DARK - mean));
+        shoulder = true;
+      } else {
+        const strength = (EXPO_GATE - mean) / EXPO_GATE;
+        gamma = 1 - 0.55 * strength;
+      }
       const lut = new Uint8Array(256);
-      for (let v = 0; v < 256; v++) lut[v] = Math.round(255 * Math.pow(v / 255, gamma));
+      for (let v = 0; v < 256; v++) {
+        let t = Math.pow(v / 255, gamma);
+        if (shoulder && t > 0.82) t = 0.82 + 0.18 * Math.tanh((t - 0.82) / 0.18);
+        lut[v] = Math.round(255 * t);
+      }
       expo = { lut };
     }
   } catch {
@@ -940,7 +973,7 @@ export function drawPoster(canvas, state) {
 
   // Lettering: gradient title with a double outline, neon script tagline.
   const title = (state.title || '').trim().toUpperCase();
-  const titleBox = title ? drawTitle(ctx, w, h, title, noir, mosaic ? 0.7 : 1) : null;
+  const titleBox = title ? drawTitle(ctx, w, h, title, noir, mosaic ? 0.65 : 1) : null;
   const tag = (state.tagline || '').trim();
   if (tag) drawTagline(ctx, w, h, tag, noir, titleBox);
 
