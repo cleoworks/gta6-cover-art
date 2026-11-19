@@ -119,6 +119,26 @@ export const GRADES = {
     enrich: { sat: 1.24, curve: 0.16 },
     skinProtect: true,
     skinTame: { mix: 0.72, sat: 0.92, bright: [0.93, 0.995], satHi: [0.58, 0.78], rgHi: [0.55, 0.7] },
+    // Round 13 (`magentaTame`): the skin taming above fixed saturation
+    // but not hue — measured on the round-12 export, the fisherman's
+    // lit cheek sits at hue ~343 and his beard at ~349 (magenta-pink),
+    // where the same photograph in the field's top-10 artifact reads
+    // hue ~9–17 (warm brown) at comparable points. Detected skin whose
+    // hue lives in the magenta sector is therefore rotated up through
+    // 360 toward a warm anchor hue, by `angle` of the remaining arc at
+    // full weight, with saturation and value preserved exactly — the
+    // pixel keeps its round-12 saturation (the tamed ~0.41 the micro
+    // judges passed) and only its family changes, so the tangerine
+    // failure mode cannot reopen. The sector weight fades out again
+    // before the near-red end (350–356): the marina subject's cheek
+    // sits at hue ~359, already red rather than magenta, and is not
+    // to be moved. The sector test (blue above green,
+    // red leading or near-leading, a moderate saturation band) is one
+    // the heroine's and the marina subject's skin cannot pass — their
+    // green sits above their blue everywhere — so no other subject's
+    // skin moves; saturated props (the red dress, the convertible)
+    // fall outside the saturation band.
+    magentaTame: { angle: 0.85, target: 18 },
     harmonize: true,
     glowSun: true,
     titleStops: [[0, '#fff7dc'], [0.34, '#ffd166'], [0.68, '#ff944c'], [1, '#ff6a2a']],
@@ -308,13 +328,24 @@ function gridShapes(w, h) {
     poly: [[x, y], [x + pw, y], [x + pw, y + ph], [x, y + ph]],
   });
   if (w > h) {
-    // Landscape: hero on the left (~55% wide, full height), 2x2 satellites right.
+    // Landscape: hero on the left (~55% wide, full height), 2x2 satellites
+    // right. The satellite CELLS are listed in panel order — pier top-left,
+    // causeway bottom-left, neon top-right, marina bottom-right (round 13):
+    // the dressed lettering band strides across the hero and the LEFT
+    // satellite column only, so the top-right cell is the one satellite the
+    // band never reaches — that is where the neon street lives now, because
+    // a signage scene has to be read whole or it is dead weight behind the
+    // title. The causeway — pure scenery, a road and palms — takes the
+    // bottom-left cell in the band's path instead: scenery tolerates the
+    // letters the way the winning covers' backdrop panels do. Panel order
+    // itself (and with it the caption chips, the seal's panel and the sun's
+    // panel) is exactly what it was; only two cells traded places.
     const mw = w * 0.55;
     const cw = (w - mw) / 2;
     const ch = h / 2;
     return [rect(0, 0, mw, h, true),
-      rect(mw, 0, cw, ch), rect(mw + cw, 0, cw, ch),
-      rect(mw, ch, cw, ch), rect(mw + cw, ch, cw, ch)];
+      rect(mw, 0, cw, ch), rect(mw, ch, cw, ch),
+      rect(mw + cw, 0, cw, ch), rect(mw + cw, ch, cw, ch)];
   }
   if (w < h) {
     // Portrait: hero on top (~52% high), 2x2 satellites below.
@@ -902,6 +933,16 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
     const tameBright = grade.skinTame?.bright ?? [0.9, 0.98];
     const tameSatHi = grade.skinTame?.satHi ?? [0.55, 0.75];
     const tameRgHi = grade.skinTame?.rgHi ?? [0.42, 0.55];
+    // Magenta taming (grades that carry `magentaTame`: Blockbuster,
+    // round 13). Judged on the FINAL pixel (after the mix, the
+    // saturation lift and the white-balance walk — the colour the
+    // poster actually prints): a pixel in the magenta hue sector
+    // (blue above green, which for red- or blue-led pixels means a
+    // hue of 280–360) with skin-like gates gets its hue rotated up
+    // through 360 toward the grade's warm anchor, saturation and
+    // value untouched. See the grade's own note for the measurements
+    // behind it. Grades without the flag skip the branch entirely.
+    const magTame = grade.magentaTame ?? null;
     for (let y = 0; y < ch; y++) {
       const rowBase = y * cw;
       const bayerRow = BAYER8[y & 7];
@@ -999,6 +1040,48 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null) {
           nr = Math.max(0, Math.min(255, nr * (1 + (wb[0] - 1) * wf)));
           ng = Math.max(0, Math.min(255, ng * (1 + (wb[1] - 1) * wf)));
           nb = Math.max(0, Math.min(255, nb * (1 + (wb[2] - 1) * wf)));
+        }
+        if (magTame && nb > ng && nr >= ng) {
+          // Cheap exact pre-filter: a hue of 280–360 needs blue above
+          // green with red at or above green (green-led pixels live at
+          // hues 60–180 and can never qualify). Everything inside runs
+          // only for pixels that pass it.
+          const mx = Math.max(nr, ng, nb);
+          const mn = Math.min(nr, ng, nb);
+          const d = mx - mn;
+          if (d > 0 && mx > 40) {
+            const sat = d / mx;
+            let hue;
+            if (mx === nr) hue = 60 * (((ng - nb) / d) % 6);
+            else if (mx === nb) hue = 60 * ((nr - ng) / d + 4);
+            else hue = 60 * ((nb - nr) / d + 2);
+            if (hue < 0) hue += 360;
+            if (hue >= 280) {
+              let mw = smoothstep(280, 305, hue)
+                * (1 - smoothstep(350, 356, hue))
+                * smoothstep(0.1, 0.2, sat) * (1 - smoothstep(0.5, 0.62, sat))
+                * smoothstep(0.03, 0.1, (nr - ng) / 255)
+                * (1 - smoothstep(0.55, 0.7, (nr - ng) / 255))
+                * smoothstep(40, 80, mx) * (1 - smoothstep(0.94, 0.99, mx / 255))
+                * smoothstep(0.86, 0.98, nr / mx);
+              // Blue-led pixels are the panel's shade and sky far more
+              // often than its skin: they rotate at reduced weight.
+              if (mx === nb) mw *= 0.6;
+              if (mw > 0) {
+                const nh0 = hue + ((360 - hue) + magTame.target) * magTame.angle * mw;
+                const nh = nh0 >= 360 ? nh0 - 360 : nh0;
+                // Rebuild at the new hue with the same max and chroma:
+                // saturation and value are preserved by construction.
+                const x = d * (1 - Math.abs(((nh / 60) % 2) - 1));
+                if (nh < 60) { nr = mx; ng = mn + x; nb = mn; }
+                else if (nh < 120) { nr = mn + x; ng = mx; nb = mn; }
+                else if (nh < 180) { nr = mn; ng = mx; nb = mn + x; }
+                else if (nh < 240) { nr = mn; ng = mn + x; nb = mx; }
+                else if (nh < 300) { nr = mn + x; ng = mn; nb = mx; }
+                else { nr = mx; ng = mn; nb = mn + x; }
+              }
+            }
+          }
         }
         px[i] = nr;
         px[i + 1] = ng;
@@ -1321,9 +1404,12 @@ const REVIEW_SOURCE = 'THE STRIP GAZETTE';
 // The banner strip's centre line: a second beat of the cover's own
 // world, NOT the script tagline repeated in capitals — the strip used
 // to spend its loudest line saying the same words the script had just
-// said above it. This one counts the poster's five faces and closes
-// the story the tagline opens.
-const BANNER_LINE = 'FIVE FACES — ONE COAST — NO WAY BACK';
+// said above it. This one counts the poster's five panels as five
+// stories and closes the story the tagline opens. (It used to say
+// FIVE FACES; since round 12 only three of the five panels are faces
+// — the other two are scenes — and the copy has to be true to the
+// cover it rides on.)
+const BANNER_LINE = 'ONE COAST — FIVE STORIES — NO WAY BACK';
 const MICROTEXT = 'VICE COVER STUDIO — SHOT ON YOUR OWN CAMERA — GRADED BY HAND — NO PHOTO LEAVES THIS MACHINE — CAT. NO. VC-2026-001';
 
 // Caption chips for the Grid's five panels, in panel order — the
@@ -1488,14 +1574,26 @@ function drawPanelChips(ctx, shapes, w, h) {
     const subW = ctx.measureText(sub).width;
     const chipW = barW + padX * 2 + Math.max(nameW, subW);
     const chipH = padY * 2 + nameSize + lineGap + subSize;
-    // The night panel's subject fills its top-left corner and its whole
-    // lower half sits behind the title, so his chip hangs at the
-    // panel's top-right, over the neon signage — clear of the face.
-    // Every other chip hangs at its panel's top-left.
+    // The night panel's chip hangs at the panel's top-right, over the
+    // neon signage — clear of the crowd below. Every other chip hangs
+    // at its panel's top-left, EXCEPT the landscape Grid's bottom-left
+    // satellite (the causeway since round 13): its top-left corner
+    // sits inside the title band, where a chip would print across the
+    // letters, so its chip drops to the panel's lower right instead —
+    // the strip beside the script's tail, above the banner, over the
+    // road in the scene. The geometry test (same left edge as the
+    // panel above it, lower top edge) picks that one cell out in any
+    // aspect; portrait and square Grids keep the plain top-left rule.
+    const buried = w > h && shapes[1] && i > 1
+      && shapes[i].x === shapes[1].x && shapes[i].y > shapes[1].y;
     const x = i === 3
       ? shapes[i].x + shapes[i].w - chipW - w * 0.011
-      : shapes[i].x + w * 0.011;
-    const y = shapes[i].y + h * 0.013;
+      : (buried
+        ? shapes[i].x + shapes[i].w - chipW - w * 0.011
+        : shapes[i].x + w * 0.011);
+    const y = buried
+      ? shapes[i].y + shapes[i].h * 0.6
+      : shapes[i].y + h * 0.013;
     ctx.fillStyle = 'rgba(8, 4, 18, 0.8)';
     ctx.fillRect(x, y, chipW, chipH);
     ctx.fillStyle = '#ff2e63';
@@ -1653,14 +1751,25 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
   }
   if (state.layout === 'grid') {
     drawPanelChips(ctx, shapes, w, h);
-    // Landscape Grid: the seal rides the causeway panel's sea, upper
-    // left inside the panel — open water with no subject in reach.
-    // It used to sit on the gutter beside the pier panel, and its
-    // right-hand spikes pressed the fisherman's bare shoulder: a
-    // sticker may cross a gutter, but it may never touch skin or
-    // clothing, and the sea in the scene panel is the one patch of
-    // guaranteed dead space on the whole cover.
-    if (w > h) drawSeal(ctx, shapes[2].x + shapes[2].w * 0.22, shapes[2].y + shapes[2].h * 0.32, minSide * 0.082, -0.2);
+    // Landscape Grid: the seal rides the HERO panel's sky — measured,
+    // not assumed. Round 13 put it on the causeway panel on the claim
+    // that the sky there was guaranteed dead space; it was not: a pixel
+    // scan of the causeway cell's whole visible strip found no clean
+    // circle at the seal's radius (best spot still 22.7% palm-dark —
+    // the big palm's crown and trunk run through every free position),
+    // and a 3x zoom confirmed the seal sitting on fronds and trunk.
+    // The hero sky, by contrast, is clean by measurement: centred at
+    // panel (0.207, 0.208) the seal's circle holds pure sky — mean
+    // luminance ~193, zero dark pixels, mean Sobel gradient 0.36 —
+    // clear of the chip below it (44 px), the review pill (88 px),
+    // her hair (36 px), the sun and the lifeguard tower below, and
+    // both palm trunks flanking it (10 px and 4 px). It is drawn a
+    // fifth smaller than it was (round 12's seal swallowed most of the
+    // little scene panel's sea and sunset whole). The seal must never
+    // drift back over the gutter toward the fisherman — its first
+    // home, two rounds ago, pressed his bare shoulder, and a sticker
+    // may cross a gutter but may never touch skin or clothing.
+    if (w > h) drawSeal(ctx, shapes[0].x + shapes[0].w * 0.207, shapes[0].y + shapes[0].h * 0.208, minSide * 0.064, -0.2);
     else if (w < h) drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
     else drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
   } else if (state.layout === 'duo') {
@@ -1971,10 +2080,17 @@ export function drawPoster(canvas, state) {
     // scale it would push the script through the banner strip. Here
     // the script starts smaller and lands on a fixed line just above
     // the strip, kissing the title's lower outline the way the
-    // winners' scripts ride their titles.
+    // winners' scripts ride their titles. Since round 13 it is also
+    // pulled left and fitted narrower (centre 0.345w, at most 0.46w
+    // wide): measured, its ink and glow now end near 0.60w, so the
+    // script's box clears every subject box on the cover with room —
+    // the marina subject's left edge sits at 0.81w, and over the hero
+    // the reframed shot (see shots.js) keeps her head, shoulders and
+    // chest a full hand's width above the script's line, which crosses
+    // only the car's zone and her belt line below them.
     drawTagline(ctx, w, h, tag, noir, titleBox,
       titleBox && titleBox.band
-        ? { cx: titleBox.cx, maxW: w * 0.52, start: titleBox.size * 0.42, baseline: h * 0.862 }
+        ? { cx: w * 0.345, maxW: w * 0.46, start: titleBox.size * 0.42, baseline: h * 0.862 }
         : (heroTagged ? { cx: titleBox.cx, maxW: w * 0.52 } : {}));
   }
 

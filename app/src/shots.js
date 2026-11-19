@@ -37,32 +37,47 @@ export async function runShot(shot, query, helpers) {
     state.panels[i].src = src;
     if (framing) Object.assign(state.panels[i], framing);
   };
-  // The Blockbuster Grid showcase frames its hero tighter and lower:
-  // zoomed in and favouring the top of the photo, the heroine sits
-  // deeper in her panel, which opens a clean band of sky across the
-  // panel's top for the review row — clear of her hair — while her
-  // face stays large. Only this scene is reframed; every other shot
-  // keeps the renderer's default framing exactly.
+  // The Blockbuster Grid showcase's hero framing (round 13): a mid
+  // shot, not the old tight crop. At zoom 1.22 the photo's window
+  // ended at her belt, so everything the title band covered was her —
+  // the band cut her at the neck and left a floating head with no
+  // body and no car. At zoom 1, favouring the top of the photo, the
+  // window runs from just above her hair to her upper thighs: head,
+  // shoulders and upper chest stay ABOVE the title's top edge, and
+  // what the letters and the script cross below them is the car's
+  // zone and her belt line — the winners' pattern, where the
+  // lettering rides the car, never the person. The sky band across
+  // the panel's top still clears her hair for the review row (her
+  // hair's top lands ~0.10 down the panel, the pill ends at 0.074).
+  // Only this scene is reframed; every other shot keeps the
+  // renderer's default framing exactly.
   const heroFrame = (state.layout === 'grid' && state.grade === 'blockbuster')
-    ? { zoom: 1.22, oy: 0.9 }
+    ? { zoom: 1, oy: 0.85 }
     : undefined;
-  // The Blockbuster Grid showcase's two scene panels get their own
-  // framings, for the same reason the hero does: the causeway photo
+  // The Blockbuster Grid showcase's scene panels get their own
+  // framings, for the same reason the hero does. The causeway photo
   // is a wide sunset slice whose money is split between the sea on
-  // its left and the palm over the road on its right — the default
-  // centred crop keeps mostly palm and road, so the showcase pans
-  // toward the sea, which is also where the poster's seal rides
-  // (open water, no subject). The neon street keeps the centred
-  // crop: its signs and crowd already fill the slice evenly. Any
-  // other scene keeps the renderer's default framing exactly.
+  // its left and the palm over the road on its right — the showcase
+  // pans toward the sea (ox 0.55), which keeps the palm-and-road
+  // slice in the strip of its round-13 cell (bottom-left, beside the
+  // title band) that stays visible. The neon street pans the other
+  // way (ox 0.35 toward its left signs): in its round-13 cell
+  // (top-right, the one cell the band never reaches) the whole panel
+  // shows, and the centred crop would slice the Steakhouse and
+  // Rancho signs at its left edge — the pan keeps the legible signs
+  // and the crowd under them inside the frame. Any other scene keeps
+  // the renderer's default framing exactly.
   const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
   const coastFrame = (showcaseScene && third.endsWith('coast.jpg'))
     ? { ox: 0.55 }
     : undefined;
+  const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
+    ? { ox: 0.35 }
+    : undefined;
   put(0, first, imgA, heroFrame);
   put(1, second, imgB);
   put(2, third, imgC, coastFrame);
-  put(3, fourth, imgD);
+  put(3, fourth, imgD, neonFrame);
   put(4, fifth, imgE);
   put(5, sixth, imgF);
   // Mosaic's last row: second showings of the first three photos, sharing
