@@ -150,20 +150,45 @@ export async function runShot(shot, query, helpers) {
   const cruiserFrame = (showcaseScene && third.endsWith('cruiser.jpg'))
     ? { zoom: 1.65, ox: -0.24, oy: -0.16 }
     : undefined;
-  // The Cast cruiser framing (round 48): the scene panel is tall and
-  // full-height, and the window (zoom 1.28) is raised so the whole
-  // car — nose to fin — rides in the strip ABOVE the title band,
-  // the mirror of the Grid cell's trick of holding the car in the
-  // strip below the letters: the car's established box stands at
-  // canvas y ~255-565 with the seal just above its roofline, and
-  // the visible car area measures ~134k px, about twice what the
-  // Grid cell showed from behind the lettering (~68k). The street
-  // and the title fill the panel below the car. The portrait strip
-  // centres a gentler window on the car instead.
+  // The Cast cruiser framing (round 48): the scene panel is tall,
+  // and the window (zoom 1.28) is raised so the whole car — nose to
+  // fin — rides in the strip ABOVE the title band, the mirror of
+  // the Grid cell's trick of holding the car in the strip below the
+  // letters: the car's established box stands at canvas y ~255-565
+  // with the seal just above its roofline, and the visible car area
+  // measures ~134k px, about twice what the Grid cell showed from
+  // behind the lettering (~68k). Round 49: the panel now ends at
+  // the middle column's split line (680/1080) with the neon panel
+  // below it, and the shorter panel's bounding box is narrower
+  // too (the slanted right edge travels less), so the window is
+  // re-anchored — zoom 1.3274, ox 0.5031, oy 0.1257 in place of
+  // 1.28 / 0.44 / -0.78 — to land the drawn image at the identical
+  // canvas offset and scale: the car at exactly round 48's place
+  // and size, its street strip and chip ground kept above the
+  // split. The portrait strip centres a gentler window on the car
+  // instead.
   const cruiserCastFrame = (state.layout === 'cast' && state.grade === 'blockbuster' && third.endsWith('cruiser.jpg'))
     ? (state.size === '1080x1350'
       ? { zoom: 1.15, ox: 0.74, oy: -0.03 }
-      : { zoom: 1.28, ox: 0.44, oy: -0.78 })
+      : { zoom: 1.3274, ox: 0.5031, oy: 0.1257 })
+    : undefined;
+  // The Cast neon framing (round 49): the fifth panel takes the
+  // middle column's lower stage. The sign's place in it is chosen
+  // against the lettering, not the panel: the title's last letters
+  // hang over the panel's top-left down to ~y 800 and its ink ends
+  // at ~x 1310, so the blade sign (established photo box: letters
+  // x 0.516-0.663, y 0.070-0.329) is framed at the panel's right,
+  // clear of the title, the script and the banner — at scale 1.0
+  // (zoom 1.4357, pinned to the photo's top) it lands at canvas
+  // ~x 1330-1480, y 728-905, larger than the Grid's cell showed it
+  // (0.84), with the station's roof and medallion below it and the
+  // pumps at the panel's right edge. The portrait cell is smaller
+  // and wider, so it takes a gentler centred window on the sign
+  // instead.
+  const neonCastFrame = (state.layout === 'cast' && state.grade === 'blockbuster' && fourth.endsWith('neon.jpg'))
+    ? (state.size === '1080x1350'
+      ? { zoom: 1.0, ox: -0.35, oy: 0.9 }
+      : { zoom: 1.4357, ox: 0.43, oy: 1 })
     : undefined;
   // The Cast pier framing (round 48): the portrait column is
   // narrower than the Grid's pier cell, so the window zooms to 1.25
@@ -212,10 +237,12 @@ export async function runShot(shot, query, helpers) {
   // marina portrait, cruiser scene: the marina takes panel 2 (at the
   // renderer's default framing exactly; its Cast cell is built to
   // the size that frame was proven at in the Grid) and the cruiser
-  // takes panel 3 at its Cast frame above.
+  // takes panel 3 at its Cast frame above. Round 49 adds the fifth:
+  // the neon station takes panel 4 at its Cast frame.
   if (state.layout === 'cast') {
     put(2, fifth, imgE);
     put(3, third, imgC, cruiserCastFrame);
+    put(4, fourth, imgD, neonCastFrame);
   }
   // Mosaic's last row: second showings of the first three photos, sharing
   // their Image objects so the renderer mirrors them like the editor does.

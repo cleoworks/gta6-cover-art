@@ -45,7 +45,7 @@ export const LAYOUTS = {
   duo: { panels: 2, slant: 0.055, label: 'Split Duo' },
   solo: { panels: 1, slant: 0, label: 'Solo Hero' },
   grid: { panels: 5, slant: 0, label: 'Cover Grid' },
-  cast: { panels: 4, slant: 0, label: 'Cast Cover' },
+  cast: { panels: 5, slant: 0, label: 'Cast Cover' },
   mosaic: { panels: 9, slant: 0, label: 'Mosaic' },
 };
 
@@ -438,7 +438,7 @@ export const GRADES = {
  *  is a 3x3 grid of nine equal cells (the GTA V cover pattern). */
 export function panelShapes(w, h, layout) {
   if (layout === 'grid') return { shapes: gridShapes(w, h), slant: 0, count: 5 };
-  if (layout === 'cast') return { shapes: castShapes(w, h), slant: 0, count: 4 };
+  if (layout === 'cast') return { shapes: castShapes(w, h), slant: 0, count: 5 };
   if (layout === 'mosaic') return { shapes: mosaicShapes(w, h), slant: 0, count: 9 };
   const spec = LAYOUTS[layout] ?? LAYOUTS.trio;
   const n = spec.panels;
@@ -575,7 +575,18 @@ function gridShapes(w, h) {
  *  the four tile the canvas exactly.
  *  Portrait: hero across the top (46% of the height), the two
  *  portraits side by side under it, the cruiser as a wide strip
- *  along the foot. Square: the same stack with a taller hero. */
+ *  along the foot. Square: the same stack with a taller hero.
+ *  Round 49: the middle column splits across at 680/1080 of the
+ *  height and the neon station takes the lower stage as a fifth
+ *  panel — round 48's cover had dropped the Grid's one neon panel,
+ *  and with it the cover's only blue-night contrast. The split sits
+ *  below the cruiser's car (its box ends at 565/1080) with room for
+ *  the cruiser's chip on the street under the car, the hero and the
+ *  portrait column keep their proven geometry untouched, and the
+ *  cruiser's window is re-anchored (see shots.js) so the car itself
+ *  lands at the same canvas place and scale as round 48. Portrait
+ *  and square split the foot strip instead: cruiser left, neon
+ *  right, so the five-panel order holds at every aspect. */
 function castShapes(w, h) {
   const rect = (x, y, pw, ph, main) => ({
     x, y, w: pw, h: ph, main: !!main,
@@ -598,25 +609,30 @@ function castShapes(w, h) {
       };
     };
     const t = ph / h;
+    const ys = h * (680 / 1080);
+    const ts = ys / h;
     return [
       shape([[0, 0], [hw, 0], [hw + lean, h], [0, h]], true),
       shape([[cw0, 0], [w, 0], [w, ph], [cw0 + lean * t, ph]]),
       shape([[cw0 + lean * t, ph], [w, ph], [w, h], [cw0 + lean, h]]),
-      shape([[hw, 0], [cw0, 0], [cw0 + lean, h], [hw + lean, h]]),
+      shape([[hw, 0], [cw0, 0], [cw0 + lean * ts, ys], [hw + lean * ts, ys]]),
+      shape([[hw + lean * ts, ys], [cw0 + lean * ts, ys], [cw0 + lean, h], [hw + lean, h]]),
     ];
   }
   if (w < h) {
     const mh = h * 0.46;
     const ch = h * 0.3;
+    const fw = w * 0.6;
     return [rect(0, 0, w, mh, true),
       rect(0, mh, w / 2, ch), rect(w / 2, mh, w / 2, ch),
-      rect(0, mh + ch, w, h - mh - ch)];
+      rect(0, mh + ch, fw, h - mh - ch), rect(fw, mh + ch, w - fw, h - mh - ch)];
   }
   const mh = h * 0.5;
   const ch = h * 0.28;
+  const fw = w * 0.6;
   return [rect(0, 0, w, mh, true),
     rect(0, mh, w / 2, ch), rect(w / 2, mh, w / 2, ch),
-    rect(0, mh + ch, w, h - mh - ch)];
+    rect(0, mh + ch, fw, h - mh - ch), rect(fw, mh + ch, w - fw, h - mh - ch)];
 }
 
 /** Mosaic: nine equal cells in a 3x3 grid, whatever the canvas aspect —
@@ -1172,10 +1188,24 @@ function painterlyInkCanvas(px, cw, ch, expo, p) {
   return out;
 }
 
+/** Round 49: the Cast cruiser's dose. Round 48's judging found the
+ *  Cast cruiser panel posterized harder than the same photo in the
+ *  Grid's cell — at the Cast panel's tall full-height window the bold
+ *  dose (round 32) and the two hue tames flatten the car's body and
+ *  street detail the smaller cell kept. The Cast cruiser therefore
+ *  runs the dose at this factor: the bold factor itself (ramp, mix,
+ *  enrich) and the magenta/fringe tame weights all scale by it, for
+ *  this one panel in this one layout. The Grid's cruiser cell keeps
+ *  the full dose exactly, and mean-measure renders never take the
+ *  dose at all, so no panel's harmonize gains move and every other
+ *  panel renders as before. The value is set by the round-49 scan
+ *  (car-box detail measured against the round-46 render). */
+const CAST_CRUISER_DOSE = 0.5;
+
 /** A panel's photo, drawn cover-fit into its own canvas and run through the
  *  grade's gradient map. Cached per (photo, grade, panel size, framing) so
  *  repeat renders and exports stay fast. */
-export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure = false) {
+export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure = false, layoutKey = '') {
   const cw = Math.max(1, Math.round(shape.w));
   const ch = Math.max(1, Math.round(shape.h));
   const img = photo.img;
@@ -1191,7 +1221,14 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
     ? boldSpec.photos.find((n) => (photo.src ?? img.src ?? '').endsWith(n))
     : undefined;
   const boldOn = !!boldName;
-  const boldF = boldOn ? (boldSpec.dose?.[boldName] ?? 1) : 0;
+  let boldF = boldOn ? (boldSpec.dose?.[boldName] ?? 1) : 0;
+  // The Cast cruiser's reduced dose (see CAST_CRUISER_DOSE above):
+  // one panel, one layout — the tame weights below scale by the
+  // same factor, and the panel's cache key already carries boldF,
+  // so the reduced render caches apart from the full-dose one.
+  const castCruiser = boldOn && layoutKey === 'cast' && boldName === 'cruiser.jpg';
+  if (castCruiser) boldF = Math.min(boldF, CAST_CRUISER_DOSE);
+  const tameScale = castCruiser ? CAST_CRUISER_DOSE : 1;
   const key = [img.__vcId, gradeKey, cw, ch,
     (photo.zoom ?? 1).toFixed(3), (photo.ox ?? 0).toFixed(3), (photo.oy ?? 0.55).toFixed(3),
     photo.flip ? 'f' : '',
@@ -1591,7 +1628,7 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
                 if (nw > mw) mw = nw;
               }
               if (mw > 0) {
-                const nh0 = hue + ((360 - hue) + magTame.target) * magTame.angle * mw;
+                const nh0 = hue + ((360 - hue) + magTame.target) * magTame.angle * mw * tameScale;
                 const nh = nh0 >= 360 ? nh0 - 360 : nh0;
                 // Rebuild at the new hue with the same max and chroma:
                 // saturation and value are preserved by construction.
@@ -1641,7 +1678,8 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
                   * smoothstep(0.24, 0.32, sat) * (1 - smoothstep(0.58, 0.68, sat))
                   * smoothstep(0.46, 0.56, mx / 255)
                   * (1 - smoothstep(0.07, 0.13, (ng - nb) / mx))
-                  * smoothstep(0.12, 0.3, fringeGate[rowBase + x]);
+                  * smoothstep(0.12, 0.3, fringeGate[rowBase + x])
+                  * tameScale;
                 if (fw > 0) {
                   const arc = hue >= 346
                     ? (360 - hue) + fringeTame.target
@@ -1698,12 +1736,12 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
 }
 
 /** Draws one graded photo panel, clipped to the panel polygon. */
-export function drawPanelPhoto(ctx, shape, photo, gradeKey, wb = null) {
+export function drawPanelPhoto(ctx, shape, photo, gradeKey, wb = null, layoutKey = '') {
   if (!photo || !photo.img) return;
   ctx.save();
   tracePoly(ctx, shape.poly);
   ctx.clip();
-  ctx.drawImage(gradedPanelCanvas(shape, photo, gradeKey, wb), shape.x, shape.y);
+  ctx.drawImage(gradedPanelCanvas(shape, photo, gradeKey, wb, false, layoutKey), shape.x, shape.y);
   ctx.restore();
 }
 
@@ -2015,21 +2053,28 @@ const PANEL_CAPTIONS = [
   ['MARINA DEL FARO', '8:03 PM — SMILING AT THE STORM'],
 ];
 
-// Role chips for the Cast layout's four panels, in cast order — the
-// complete system, one role per panel, each name born from what its
-// photo actually shows (round 45's lesson: a half-mixed system of
-// roles and places read as half-hearted, and a role the image does
-// not support reads as pasted on). The heroine runs the boulevard
-// in sunglasses — the fixer. The pier man holds a fishing rod on his
-// own pier — the fisherman, literally. The marina girl smiles out
-// of the harbour dusk — the siren. The cruiser is the car the story
-// leaves in — the getaway. The sub-line keeps the Grid chips' own
-// form, place and hour, so the role sits on the same furniture.
+// Chips for the Cast layout's five panels, in cast order (round 49
+// rework of round 48's set). The rule the set now follows, learned
+// from the round-48 judging: a PORTRAIT panel carries a role, and
+// the role must be born from what its photo actually shows (round
+// 45's lesson — a role the image does not support reads as pasted
+// on); a SCENE panel carries no role at all, only its place and
+// hour in the Grid chips' own form. The heroine's role is billing,
+// not biography: she holds the cover's largest panel, so she is
+// THE LEAD — the one claim the composition itself proves. The pier
+// man holds a fishing rod on his own pier — the fisherman,
+// literally. The marina girl smiles out of the harbour dusk — the
+// siren. The cruiser stands parked on Ocean Drive at 5:12 PM, so
+// its chip says exactly that and nothing more; the neon station
+// keeps the Grid's own district chip. The sub-line keeps the Grid
+// chips' form, place and hour, so every chip sits on the same
+// furniture.
 const CAST_CAPTIONS = [
-  ['THE FIXER', 'PALMERA BOULEVARD — 6:47 PM'],
+  ['THE LEAD', 'PALMERA BOULEVARD — 6:47 PM'],
   ['THE FISHERMAN', 'HARROW PIER — 5:58 AM'],
   ['THE SIREN', 'MARINA DEL FARO — 8:03 PM'],
-  ['THE GETAWAY', 'OCEAN DRIVE — 5:12 PM'],
+  ['OCEAN DRIVE', '5:12 PM'],
+  ['NEON DISTRICT', '11:48 PM — AFTER DARK'],
 ];
 
 function rr(ctx, x, y, w, h, r) {
@@ -2206,28 +2251,43 @@ function drawPanelChips(ctx, shapes, w, h, layoutKey) {
     const buried = w > h && !!shapes[i].chipLow;
     // The Cast cruiser's chip (round 48): the scene panel's top is
     // the review pill's ground and its left flank is the title's, so
-    // THE GETAWAY drops to the panel's lower right instead — the
-    // street below the car, above the banner strip, clamped inside
-    // the panel's slanted right edge like every other chip.
+    // the chip drops to the panel's lower right instead — the
+    // street below the car, clamped inside the panel's slanted
+    // right edge like every other chip. Round 49: the panel now
+    // ends at the middle column's split line, so the chip rides the
+    // panel's own foot (the street strip the split leaves under the
+    // car) instead of a fixed canvas height, with a bottom clamp
+    // against the split edge below.
     const castLow = layoutKey === 'cast' && w > h && i === 3;
+    // The Cast neon chip (round 49): every corner of the fifth
+    // panel is spoken for — the title hangs over its top-left, the
+    // GAS sign the panel is framed around owns its top-right, the
+    // banner strip owns its foot — so the district chip rides the
+    // panel's lower left instead, over the station's dark trees,
+    // just above the banner strip and clear of the script's tail.
+    const castNeon = layoutKey === 'cast' && w > h && i === 4;
     // The Cast pier chip (round 48): the portrait column is narrow,
     // so a top-left chip there would sit across the fisherman's hat
     // and forehead — his panel's one crowded corner. THE FISHERMAN
     // instead rides the panel's lower right, over the open sea
     // beside his rod, clear of the face above and the divider below.
     const castSea = layoutKey === 'cast' && w > h && i === 1;
-    let x = i === 3 || castSea
-      ? shapes[i].x + shapes[i].w - chipW - w * 0.011
-      : (buried
+    let x = castNeon
+      ? shapes[i].x + w * 0.026
+      : (i === 3 || castSea
         ? shapes[i].x + shapes[i].w - chipW - w * 0.011
-        : shapes[i].x + w * 0.011);
-    let y = castLow
-      ? h * 0.79
-      : (castSea
-        ? shapes[i].y + shapes[i].h - chipH - h * 0.013
         : (buried
-          ? shapes[i].y + shapes[i].h * 0.6
-          : shapes[i].y + h * 0.013));
+          ? shapes[i].x + shapes[i].w - chipW - w * 0.011
+          : shapes[i].x + w * 0.011));
+    let y = castNeon
+      ? h * 0.876 - chipH - h * 0.008
+      : (castLow
+        ? shapes[i].y + shapes[i].h - chipH - h * 0.013
+        : (castSea
+          ? shapes[i].y + shapes[i].h - chipH - h * 0.013
+          : (buried
+            ? shapes[i].y + shapes[i].h * 0.6
+            : shapes[i].y + h * 0.013)));
     // Round 19: the landscape Grid's panels are parallelograms now, so
     // a chip parked off the bounding box can hang over a slanted edge
     // onto the neighbouring panel (the marina cell's top-left corner
@@ -2243,13 +2303,14 @@ function drawPanelChips(ctx, shapes, w, h, layoutKey) {
     const spanR = polySpanAtX(shapes[i].poly, x + chipW);
     if (spanL) y = Math.max(y, spanL.top + mY);
     if (spanR) y = Math.max(y, spanR.top + mY);
-    if (i === 3 || buried || castSea) {
+    if (i === 3 || buried || castSea || castNeon) {
       const spanT = polySpanAtY(shapes[i].poly, y);
       const spanB = polySpanAtY(shapes[i].poly, y + chipH);
       if (spanT) x = Math.min(x, spanT.right - chipW - mX);
       if (spanB) x = Math.min(x, spanB.right - chipW - mX);
     }
     if (buried && spanR) y = Math.min(y, spanR.bot - chipH - mY);
+    if (castLow && spanR) y = Math.min(y, spanR.bot - chipH - mY);
     ctx.fillStyle = 'rgba(8, 4, 18, 0.8)';
     ctx.fillRect(x, y, chipW, chipH);
     ctx.fillStyle = '#ff2e63';
@@ -2365,12 +2426,11 @@ function drawBannerStrip(ctx, w, h, state) {
   // letterspaced capitals, fitted to the space BETWEEN the chip and
   // the barcode and centred in that span — on a narrow canvas the
   // height-scaled chip and barcode would otherwise eat the line's
-  // first and last letters. The Cast cover counts its own panels:
-  // four stories, not five — the copy stays true to the cover it
-  // rides on.
-  const line = state.layout === 'cast'
-    ? 'ONE COAST — FOUR STORIES — NO WAY BACK'
-    : BANNER_LINE;
+  // first and last letters. The Cast cover counts its own panels —
+  // round 48's four, round 49's five again — and the copy stays
+  // true to the cover it rides on, so the Cast line is the banner
+  // line itself.
+  const line = BANNER_LINE;
   const midL = estX + estW + w * 0.02;
   const midR = bcX - w * 0.02;
   let size = Math.round(sh * 0.54);
@@ -2732,7 +2792,7 @@ export function drawPoster(canvas, state) {
   for (let i = 0; i < shapes.length; i++) {
     const photo = panelPhoto(state, i);
     if (photo && photo.img) {
-      drawPanelPhoto(ctx, shapes[i], photo, state.grade, wbGains ? wbGains[i] : null);
+      drawPanelPhoto(ctx, shapes[i], photo, state.grade, wbGains ? wbGains[i] : null, state.layout);
     } else {
       ctx.save();
       tracePoly(ctx, shapes[i].poly);
