@@ -85,8 +85,34 @@ export async function runShot(shot, query, helpers) {
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { zoom: 1.1, ox: -0.44, oy: 0.55 }
     : undefined;
+  // The Duo portrait's pier panel (round 38): a scene, not a face.
+  // At the renderer's default framing (zoom 1.1) the Duo's tall,
+  // narrow pier cell is height-driven, so the fisherman's face alone
+  // filled ~11% of the panel and his skin texture — measured clean
+  // (mag330 0.69% in the photo-mapped face box) — kept drawing the
+  // micro judges' magenta-mottling charge purely by size. This scene
+  // therefore frames the pier photo BELOW cover-fit, at zoom 0.87,
+  // anchored to the panel's top (oy 1): the whole photograph shows —
+  // hat, face, torso, rod hand, railing and deck — inside a window
+  // 0.51 of the photo wide instead of 0.40, and the face lands at
+  // 0.626 of its old area ((0.87/1.1)^2), still large enough to read
+  // as a character, small enough to read as a man ON a pier. The
+  // scale leaves the panel's foot uncovered; that foot is the
+  // poster's own furniture zone — the lettering scrim deepens to
+  // 0.88 across it, the banner strip owns y 0.876–0.970 and the
+  // microtext rides the last line — so the photo ends behind the
+  // banner the way a scene card ends behind a one-sheet's billing
+  // block, in the poster's dark plum, never in a hole of raw sky
+  // base. The sun anchor maps through this same frame, so the disc
+  // stays on the photo's horizon, clear of the smaller face (the
+  // face ends at photo fx 0.48; the anchor rides fx 0.60). Only this
+  // scene is reframed; the Grid showcase's pier cell and every other
+  // shot keep the renderer's default framing exactly.
+  const pierDuoFrame = (state.layout === 'duo' && state.grade === 'blockbuster' && second.endsWith('pier.jpg'))
+    ? { zoom: 0.87, ox: 0, oy: 1 }
+    : undefined;
   put(0, first, imgA, heroFrame);
-  put(1, second, imgB);
+  put(1, second, imgB, pierDuoFrame);
   put(2, third, imgC, cruiserFrame);
   put(3, fourth, imgD, neonFrame);
   put(4, fifth, imgE);
