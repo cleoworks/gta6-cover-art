@@ -185,10 +185,30 @@ export async function runShot(shot, query, helpers) {
   // pumps at the panel's right edge. The portrait cell is smaller
   // and wider, so it takes a gentler centred window on the sign
   // instead.
+  // Round 51 reframes the landscape panel into the one corridor
+  // that satisfies every neighbour at once. Round 49's window held
+  // the blade at canvas x 1319-1463 — the ground the district
+  // chip's new right-side seat needs (its clamps settle it at
+  // x 1387-1575, y 778-836), so the chip would have painted over
+  // the blade's flank and the A beneath it. The seat and the sign
+  // can only coexist with the sign smaller and further left, but
+  // the title sets a floor under that move: measured on the
+  // rendered cover, the title's solid letterform ink over the
+  // panel ends at x 1247 (its opaque outline reaches ~1282), and
+  // the blade's box must start at least 20 px past the ink. The
+  // window below (zoom 1.05, ox 0.94, oy 0.90) threads it: the
+  // blade's box lands at x 1267.9-1372.7 (14 px clear of the
+  // chip), its letters' box ends at x 1386.2, the letters' own ink
+  // (x 1292.6-1331.6) clears even the title's outline, the
+  // letters stand 129 px tall, and the lower window finally
+  // admits the station's lit facade — the photo-mapped share of
+  // the panel's visible band showing the lit wall and lettering
+  // rises from round 49's 0% to ~13%. The portrait frame, the
+  // panel's geometry and the photo's bold dose (1) do not move.
   const neonCastFrame = (state.layout === 'cast' && state.grade === 'blockbuster' && fourth.endsWith('neon.jpg'))
     ? (state.size === '1080x1350'
       ? { zoom: 1.0, ox: -0.35, oy: 0.9 }
-      : { zoom: 1.4357, ox: 0.43, oy: 1 })
+      : { zoom: 1.05, ox: 0.94, oy: 0.9 })
     : undefined;
   // The Cast pier framing (round 48): the portrait column is
   // narrower than the Grid's pier cell, so the window zooms to 1.25

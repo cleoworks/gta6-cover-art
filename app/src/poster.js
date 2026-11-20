@@ -2265,6 +2265,16 @@ function drawPanelChips(ctx, shapes, w, h, layoutKey) {
     // banner strip owns its foot — so the district chip rides the
     // panel's lower left instead, over the station's dark trees,
     // just above the banner strip and clear of the script's tail.
+    // Round 51: that lower-left seat failed in the hand — it sits
+    // exactly where the tagline script's tail crosses the panel,
+    // and its box swallowed the body of the script's last word.
+    // The chip therefore parks on the panel's right, at a fifth of
+    // the panel's height, where the polygon clamps below settle it
+    // over the empty night sky at mid height (on the 1920 canvas
+    // ~(1387, 778)-(1575, 836)): right of the script's end, above
+    // the banner, and — paired with round 51's neon frame, which
+    // holds the whole GAS blade left of x 1373 — clear of the sign
+    // as well. The script's line runs uncovered end to end.
     const castNeon = layoutKey === 'cast' && w > h && i === 4;
     // The Cast pier chip (round 48): the portrait column is narrow,
     // so a top-left chip there would sit across the fisherman's hat
@@ -2272,15 +2282,13 @@ function drawPanelChips(ctx, shapes, w, h, layoutKey) {
     // instead rides the panel's lower right, over the open sea
     // beside his rod, clear of the face above and the divider below.
     const castSea = layoutKey === 'cast' && w > h && i === 1;
-    let x = castNeon
-      ? shapes[i].x + w * 0.026
-      : (i === 3 || castSea
+    let x = (i === 3 || castSea || castNeon
+      ? shapes[i].x + shapes[i].w - chipW - w * 0.011
+      : (buried
         ? shapes[i].x + shapes[i].w - chipW - w * 0.011
-        : (buried
-          ? shapes[i].x + shapes[i].w - chipW - w * 0.011
-          : shapes[i].x + w * 0.011));
+        : shapes[i].x + w * 0.011));
     let y = castNeon
-      ? h * 0.876 - chipH - h * 0.008
+      ? shapes[i].y + shapes[i].h * 0.2
       : (castLow
         ? shapes[i].y + shapes[i].h - chipH - h * 0.013
         : (castSea
