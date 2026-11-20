@@ -136,8 +136,20 @@ export const GRADES = {
     // exempt panel renders pixel-for-pixel as before. Photos not
     // named here — the pier first of all, but also any photo a user
     // loads of their own — keep the base grade exactly.
+    // Round 34: the dose list trades the causeway photo for the
+    // cruiser — the showcase's bottom-left cell takes the bundled
+    // 1960 Impala street scene (restored from round 26, where it ran
+    // in the marina's cell under the BASE grade and lost narrowly to
+    // the marina portrait) at the full dose factor 1, so the cover
+    // gains the vehicle panel every recent judging round found
+    // missing, and the combination the earlier rounds never tested —
+    // this photo, in the causeway's cell, under the bold grade — is
+    // what this round measures. The two aboard wear their faces small
+    // and distant (no close face enters the cover), and the grade's
+    // skin shields run inside the dosed render exactly as they do at
+    // base. The causeway keeps the base grade wherever else it shows.
     boldPanels: {
-      photos: ['boulevard.jpg', 'coast.jpg', 'neon.jpg', 'marina.jpg'],
+      photos: ['boulevard.jpg', 'cruiser.jpg', 'neon.jpg', 'marina.jpg'],
       ramp: [[0, [19, 8, 46]], [0.24, [96, 34, 112]], [0.46, [194, 57, 114]], [0.68, [244, 102, 66]], [0.86, [255, 176, 102]], [1, [255, 228, 172]]],
       mix: 0.58,
       enrich: { sat: 1.38, curve: 0.24 },
@@ -1906,12 +1918,15 @@ const BANNER_LINE = 'ONE COAST — FIVE STORIES — NO WAY BACK';
 const MICROTEXT = 'VICE COVER STUDIO — SHOT ON YOUR OWN CAMERA — GRADED BY HAND — NO PHOTO LEAVES THIS MACHINE — CAT. NO. VC-2026-001';
 
 // Caption chips for the Grid's five panels, in panel order — the
-// bundled scenes: the boulevard hero, the pier fisherman, the palm
-// causeway at last light, the neon walking street, the marina portrait.
+// bundled scenes: the boulevard hero, the pier fisherman, the Ocean
+// Drive cruiser (round 34: the classic-car street scene takes the
+// causeway aerial's cell, under the bold grade — its chip is round
+// 26's, written for this photo and still literally true of it), the
+// neon walking street, the marina portrait.
 const PANEL_CAPTIONS = [
   ['PALMERA BOULEVARD', '6:47 PM — SHE RUNS THIS STRIP'],
   ['HARROW PIER', '5:58 AM — FIRST CAST'],
-  ['PALMERA CAUSEWAY', '7:02 PM — THE LONG WAY HOME'],
+  ['OCEAN DRIVE', '5:12 PM — TOP DOWN'],
   ['NEON DISTRICT', '11:48 PM — AFTER DARK'],
   ['MARINA DEL FARO', '8:03 PM — SMILING AT THE STORM'],
 ];

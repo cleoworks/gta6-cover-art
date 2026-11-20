@@ -55,31 +55,33 @@ export async function runShot(shot, query, helpers) {
     ? { zoom: 1, oy: 0.85 }
     : undefined;
   // The Blockbuster Grid showcase's scene panels get their own
-  // framings, for the same reason the hero does. The causeway photo
-  // (round 18: an aerial of a Miami causeway — a bridge deck with
-  // cars over turquoise water, the skyline behind) is a wide shot
-  // whose cell (bottom-left, beside the title band) only shows its
-  // lower strip clear of the letters: the showcase zooms and pans
-  // so that strip holds the bridge deck with its cars and the open
-  // water under it, and the panel's chip — which the buried rule
-  // parks low in that same cell — lands on the bay's open water,
-  // clear of the deck, the boats and the shore tree. The neon scene
-  // (round 18: a vintage American service station at dusk, its tall
-  // red GAS blade sign lit) is framed so the sign and the station
-  // front read whole in its top-right cell and the panel's chip —
-  // which hangs at that cell's top-right — lands on pure dusk sky,
-  // clear of the sign. Any other scene keeps the renderer's default
-  // framing exactly.
+  // framings, for the same reason the hero does. The cruiser photo
+  // (round 34: the 1960 Impala convertible street scene restored
+  // from round 26 — silver car whole at photo x 0.06–0.83,
+  // y 0.42–0.66, two people aboard small and distant, a foreground
+  // of plain asphalt and sidewalk below) takes the bottom-left cell
+  // the causeway aerial held: the cell only shows its lower strip
+  // clear of the letters, so the showcase frames the window
+  // (photo x 0.03–0.90, y 0.25–0.94 at zoom 1.15) to hold the whole
+  // car in that strip — the car lands at cell y 0.24–0.60, its
+  // front at cell x 0.04 — and the panel's chip, which the buried
+  // rule parks low in that same cell, lands on the asphalt under
+  // the car's tail, clear of the body. The neon scene (round 18: a
+  // vintage American service station at dusk, its tall red GAS blade
+  // sign lit) is framed so the sign and the station front read whole
+  // in its top-right cell and the panel's chip — which hangs at that
+  // cell's top-right — lands on pure dusk sky, clear of the sign.
+  // Any other scene keeps the renderer's default framing exactly.
   const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
-  const coastFrame = (showcaseScene && third.endsWith('coast.jpg'))
-    ? { zoom: 1.35, ox: 0.82, oy: -0.53 }
+  const cruiserFrame = (showcaseScene && third.endsWith('cruiser.jpg'))
+    ? { zoom: 1.15, ox: 0.49, oy: -0.6 }
     : undefined;
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { zoom: 1.1, ox: -0.44, oy: 0.55 }
     : undefined;
   put(0, first, imgA, heroFrame);
   put(1, second, imgB);
-  put(2, third, imgC, coastFrame);
+  put(2, third, imgC, cruiserFrame);
   put(3, fourth, imgD, neonFrame);
   put(4, fifth, imgE);
   put(5, sixth, imgF);

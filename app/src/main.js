@@ -13,7 +13,7 @@ const zoomVal = document.getElementById('zoomVal');
 const panelLabel = document.getElementById('panelLabel');
 const panelPicks = document.getElementById('panelPicks');
 
-const SAMPLES = ['samples/boulevard.jpg', 'samples/pier.jpg', 'samples/convertible.jpg', 'samples/night.jpg', 'samples/marina.jpg', 'samples/surfer.jpg', 'samples/coast.jpg', 'samples/neon.jpg'];
+const SAMPLES = ['samples/boulevard.jpg', 'samples/pier.jpg', 'samples/convertible.jpg', 'samples/night.jpg', 'samples/marina.jpg', 'samples/surfer.jpg', 'samples/coast.jpg', 'samples/neon.jpg', 'samples/cruiser.jpg'];
 
 const state = {
   layout: 'trio',
