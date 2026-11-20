@@ -57,16 +57,22 @@ export async function runShot(shot, query, helpers) {
   // The Blockbuster Grid showcase's scene panels get their own
   // framings, for the same reason the hero does. The cruiser photo
   // (round 34: the 1960 Impala convertible street scene restored
-  // from round 26 — silver car whole at photo x 0.06–0.83,
-  // y 0.42–0.66, two people aboard small and distant, a foreground
+  // from round 26 — silver car whole at photo x 0.10–0.80,
+  // y 0.41–0.62, two people aboard small and distant, a foreground
   // of plain asphalt and sidewalk below) takes the bottom-left cell
   // the causeway aerial held: the cell only shows its lower strip
-  // clear of the letters, so the showcase frames the window
-  // (photo x 0.03–0.90, y 0.25–0.94 at zoom 1.15) to hold the whole
-  // car in that strip — the car lands at cell y 0.24–0.60, its
-  // front at cell x 0.04 — and the panel's chip, which the buried
-  // rule parks low in that same cell, lands on the asphalt under
-  // the car's tail, clear of the body. The neon scene (round 18: a
+  // clear of the letters, so the showcase frames the window to hold
+  // the whole car in that strip, and the panel's chip, which the
+  // buried rule parks low in that same cell, lands on the asphalt
+  // under the car's tail, clear of the body. Round 35 tightens the
+  // window on the car (zoom 1.38, photo x 0.11–0.84, y 0.25–0.82):
+  // at the round-34 window the car read small over a deep field of
+  // empty road, so now the car grows ~44% in cell area (its box
+  // fills 0.41 of the cell, up from 0.29), the fin's tip and the
+  // rear bumper bullet stay a few px inside the cell's slanted
+  // right edge, the rear tyre's bottom stays above the chip, and
+  // the road left showing below the car is a shallow strip, most
+  // of it behind the banner. The neon scene (round 18: a
   // vintage American service station at dusk, its tall red GAS blade
   // sign lit) is framed so the sign and the station front read whole
   // in its top-right cell and the panel's chip — which hangs at that
@@ -74,7 +80,7 @@ export async function runShot(shot, query, helpers) {
   // Any other scene keeps the renderer's default framing exactly.
   const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
   const cruiserFrame = (showcaseScene && third.endsWith('cruiser.jpg'))
-    ? { zoom: 1.15, ox: 0.49, oy: -0.6 }
+    ? { zoom: 1.38, ox: 0.18, oy: -0.16 }
     : undefined;
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { zoom: 1.1, ox: -0.44, oy: 0.55 }
