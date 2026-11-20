@@ -464,8 +464,8 @@ function gridShapes(w, h) {
     // Landscape (round 19): the hero plus a 2x2 satellite block, cut on
     // the diagonal the way the winning covers cut theirs. Both vertical
     // dividers lean right as they fall (the Trio family's lean, ~4
-    // degrees), and the satellite row divider RISES to the right at the
-    // same ~4 degrees the slanted title climbs (see drawPoster), so the
+    // degrees), and the satellite row divider RISES to the right in the
+    // direction the slanted title climbs (see drawPoster), so the
     // five panels interlock as parallelograms that lean into the
     // lettering instead of sitting in a rigid rectangular grid under a
     // slab. The panels still tile the canvas exactly — every internal
@@ -480,11 +480,26 @@ function gridShapes(w, h) {
     // (and the gutter stroke) follows the polygon. The row divider
     // also hands the bottom row the taller half of the block (it
     // crosses the hero's edge at 0.515 of the height and the right
-    // edge at 0.46): the causeway reads as a full panel beside and
-    // below the title band now, not a strip behind it.
+    // edge at 0.46): the bottom-left satellite reads as a full panel
+    // beside and below the title band now, not a strip behind it.
+    // Round 40 rebalances the block's COLUMNS around that bottom-left
+    // cell — the cruiser since round 34, and the showcase's smallest
+    // panel: the hero gives up 3.5 points of width (0.55 -> 0.515)
+    // and the middle satellite column takes 56.5% of the satellite
+    // block instead of half, while the row divider keeps round 19's
+    // exact line (0.515/0.46). Measured on the 1920x1080 export the
+    // cruiser cell grows +22% in area; the hero, GAS and marina
+    // cells each give up ~6-7% and the pier cell gains width
+    // alongside, so the car reads as a scene instead of the fragment
+    // the letters left of it. (An earlier round-40 draft also raised
+    // the row divider; it was dropped — the taller pier cell it made
+    // changed that panel's cover-fit window enough to push the
+    // fisherman's measured skin fringe past its gate, and the
+    // cruiser's car rode up under the title and lost visible area
+    // even as its cell grew.)
     const lean = w * 0.038;
-    const mw = w * 0.55;
-    const cw = (w - mw) / 2;
+    const mw = w * 0.515;
+    const cw = (w - mw) * 0.565;
     // The row divider is the straight line from A (on the hero's right
     // edge, 0.515 down) to B (on the canvas' right edge, 0.46 down);
     // its crossings with the two slanted dividers fix the satellites'
