@@ -117,6 +117,40 @@ export const GRADES = {
     steps: 256,
     mix: 0.55,
     enrich: { sat: 1.24, curve: 0.16 },
+    // Round 32 (`boldPanels`): round 31 tried this exact dose as a
+    // GLOBAL grade change (mix 0.58, enrich sat 1.38 / curve 0.24, the
+    // ramp's shadow stop deepened, its mid and highlight stops warmed)
+    // and measured the richness it was after — the showcase panels'
+    // mean saturation rose from 0.464 to 0.512 — but every global
+    // lever also lifted the pier portrait's face-edge population at
+    // hue 345–359, and its face mag330 rose +0.86…+2.29 points past
+    // the +0.5 gate no matter how the dose was split across levers.
+    // The dose therefore lands SELECTIVELY, locked to the four
+    // showcase photos whose skin the shields demonstrably hold (the
+    // heroine's and the marina subject's skin cannot pass the magenta
+    // sector test — see round 13 — and their face mag330 is gated
+    // separately), while the pier photo keeps the base grade above
+    // untouched, at dose zero. Like the fringe tame, the dose is
+    // excluded from the mean-measure renders the harmonize gains are
+    // computed from, so no panel's white-balance gains move and the
+    // exempt panel renders pixel-for-pixel as before. Photos not
+    // named here — the pier first of all, but also any photo a user
+    // loads of their own — keep the base grade exactly.
+    boldPanels: {
+      photos: ['boulevard.jpg', 'coast.jpg', 'neon.jpg', 'marina.jpg'],
+      ramp: [[0, [19, 8, 46]], [0.24, [96, 34, 112]], [0.46, [194, 57, 114]], [0.68, [244, 102, 66]], [0.86, [255, 176, 102]], [1, [255, 228, 172]]],
+      mix: 0.58,
+      enrich: { sat: 1.38, curve: 0.24 },
+      // Per-photo dose factors (round 32, iteration 2): a factor
+      // lerps every dose lever — ramp stops, mix, enrich — between
+      // the base grade (0) and the full dose (1). The marina photo
+      // runs at a reduced factor: at full dose its face region's
+      // mag330 rose +2.93 points (the saturation lift amplifies the
+      // pink rim light already living in the subject's braids past
+      // the sector thresholds), over the +0.5 gate the heroine's
+      // face clears at full dose (−0.03…+0.11 measured).
+      dose: { 'marina.jpg': 0.35 },
+    },
     skinProtect: true,
     skinTame: { mix: 0.72, sat: 0.92, bright: [0.93, 0.995], satHi: [0.58, 0.78], rgHi: [0.55, 0.7] },
     // Round 13 (`magentaTame`): the skin taming above fixed saturation
@@ -666,6 +700,36 @@ export function gradeLUT(gradeKey, smooth = false) {
   return lut;
 }
 
+const boldLutCache = new Map();
+
+/** The round-32 selective dose's lookup: the grade's own LUT recipe
+ *  (same posterize, same step count) read off the `boldPanels` ramp
+ *  instead of the grade's base ramp. A dose factor below 1 lerps the
+ *  ramp stops between the base ramp and the bold ramp first (the two
+ *  ramps share their stop positions by construction). Cached per
+ *  grade and factor like gradeLUT. */
+function boldGradeLUT(gradeKey, f = 1) {
+  const cacheKey = gradeKey + '@' + f;
+  if (boldLutCache.has(cacheKey)) return boldLutCache.get(cacheKey);
+  const grade = GRADES[gradeKey] ?? GRADES.sunset;
+  let ramp = grade.boldPanels?.ramp;
+  if (!ramp) return gradeLUT(gradeKey);
+  if (f < 1) {
+    ramp = grade.ramp.map((s, i) => [s[0],
+      s[1].map((c, k) => Math.round(c + (ramp[i][1][k] - c) * f))]);
+  }
+  const lut = new Uint8Array(256 * 3);
+  for (let v = 0; v < 256; v++) {
+    const t = v / 255;
+    const [r, g, b] = rampAt(ramp, posterT(t, grade.steps ?? TONAL_STEPS, grade.ease));
+    lut[v * 3] = r;
+    lut[v * 3 + 1] = g;
+    lut[v * 3 + 2] = b;
+  }
+  boldLutCache.set(cacheKey, lut);
+  return lut;
+}
+
 /** Bayer 8x8 ordered-dither thresholds (0..63), the classic dispersed-dot
  *  matrix: neighbouring thresholds are far apart in value, so a partially
  *  spilled plateau reads as fine print texture, never as clumps. */
@@ -1022,11 +1086,24 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
   const ch = Math.max(1, Math.round(shape.h));
   const img = photo.img;
   if (img.__vcId == null) img.__vcId = ++imgSeq;
+  // Round 32: the selective bold dose (see `boldPanels` on the grade)
+  // is decided per photo, here, so dosed renders cache apart from the
+  // base grade's. Mean-measure renders never take the dose: they feed
+  // the harmonize gains, and a dose there would steer every panel's
+  // white balance — the exempt pier panel included (the fringe tame
+  // is excluded from those renders for the same reason, round 14).
+  const boldSpec = (GRADES[gradeKey] ?? GRADES.sunset).boldPanels;
+  const boldName = boldSpec && !meanMeasure
+    ? boldSpec.photos.find((n) => (photo.src ?? img.src ?? '').endsWith(n))
+    : undefined;
+  const boldOn = !!boldName;
+  const boldF = boldOn ? (boldSpec.dose?.[boldName] ?? 1) : 0;
   const key = [img.__vcId, gradeKey, cw, ch,
     (photo.zoom ?? 1).toFixed(3), (photo.ox ?? 0).toFixed(3), (photo.oy ?? 0.55).toFixed(3),
     photo.flip ? 'f' : '',
     wb ? wb.map((v) => v.toFixed(3)).join(',') : '',
-    meanMeasure ? 'mean' : ''].join('|');
+    meanMeasure ? 'mean' : '',
+    boldOn ? 'bold' + boldF : ''].join('|');
   if (panelCache.has(key)) return panelCache.get(key);
 
   const canvas = document.createElement('canvas');
@@ -1050,7 +1127,9 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
   if (painterly) softenBase(ctx, cw, ch, painterly.scale, painterly.passes);
 
   const grade = GRADES[gradeKey] ?? GRADES.sunset;
-  const mix = grade.mix;
+  const mix = boldOn
+    ? (boldF >= 1 ? grade.boldPanels.mix : grade.mix + (grade.boldPanels.mix - grade.mix) * boldF)
+    : grade.mix;
   // Dark photos are exposure-lifted before grading (bright photos get a
   // null LUT and the loop below is exactly the pre-lift behaviour).
   const expo = photoExposure(img);
@@ -1059,7 +1138,7 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
   let fringeGate = null;
   let inkCanvas = null;
   if (mix > 0) {
-    const lut = gradeLUT(gradeKey);
+    const lut = boldOn ? boldGradeLUT(gradeKey, boldF) : gradeLUT(gradeKey);
     // Shadow protection (grades that carry `protect`: Noir, Poster Ink).
     // Through the protect band the posterized ramp is cross-faded to the
     // same ramp un-posterized, weighted by the pixel's own luminance:
@@ -1103,8 +1182,12 @@ export function gradedPanelCanvas(shape, photo, gradeKey, wb = null, meanMeasure
     // resampled, blurred or flattened, so photographic texture passes
     // through untouched. Grades without `enrich` skip both branches
     // and render exactly as before.
-    const eCurve = grade.enrich?.curve ?? 0;
-    const eSat = grade.enrich?.sat ?? 0;
+    const eCurve = boldOn
+      ? (boldF >= 1 ? grade.boldPanels.enrich.curve : (grade.enrich?.curve ?? 0) + (grade.boldPanels.enrich.curve - (grade.enrich?.curve ?? 0)) * boldF)
+      : (grade.enrich?.curve ?? 0);
+    const eSat = boldOn
+      ? (boldF >= 1 ? grade.boldPanels.enrich.sat : (grade.enrich?.sat ?? 0) + (grade.boldPanels.enrich.sat - (grade.enrich?.sat ?? 0)) * boldF)
+      : (grade.enrich?.sat ?? 0);
     // Skin protection (grades that carry `skinProtect`: Blockbuster).
     // The sunset ramp's orange highlight stop plus the saturation lift
     // used to push faces tangerine: the photo's warmest, most saturated
