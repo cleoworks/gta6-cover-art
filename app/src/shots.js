@@ -91,9 +91,27 @@ export async function runShot(shot, query, helpers) {
   // height, and the visible car area holds at ~99.5% of round
   // 40's — the small zoom-in pays back what the leftward shift
   // hands to the lettering.
+  // Round 43 pushes the cruiser window to maximum car presence on
+  // top of round 41's fin clearance: zoom 1.65 with the window
+  // shifted left and up (ox -0.24, oy -0.16) so the fin tip keeps
+  // its distance from the cell's slanted right edge while the car
+  // grows in the cell. Measured on the 1920x1080 export (round-40
+  // method: the car's box minus title-mask and banner overlap):
+  // the visible car area rises from round 41's 56,311 px to
+  // 67,529 px (+19.9%, past the +15% mark), the fin tip ends
+  // 18.0 px inside the divider line (round 41: 16.3; 11.3 px
+  // clear of the gutter band, empirical chrome-to-gutter gap
+  // 15 px), the bumper bullet 19.5 px (round 41: 17.7), the
+  // car's box bottom stays on round 41's line (y 901, banner
+  // overlap 0, the panel's chip still lands on the asphalt under
+  // the tail) and the street around the car — background traffic,
+  // trees, the road below — stays in frame. The growth is paid
+  // for at the window's left edge, where the photo's nose is
+  // already surrendered to the title band and the hero divider in
+  // every round since 35.
   const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
   const cruiserFrame = (showcaseScene && third.endsWith('cruiser.jpg'))
-    ? { zoom: 1.42, ox: -0.01, oy: -0.14 }
+    ? { zoom: 1.65, ox: -0.24, oy: -0.16 }
     : undefined;
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { zoom: 1.1, ox: -0.44, oy: 0.55 }
