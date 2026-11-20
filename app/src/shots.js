@@ -37,22 +37,43 @@ export async function runShot(shot, query, helpers) {
     state.panels[i].src = src;
     if (framing) Object.assign(state.panels[i], framing);
   };
-  // The Blockbuster Grid showcase's hero framing (round 13): a mid
-  // shot, not the old tight crop. At zoom 1.22 the photo's window
-  // ended at her belt, so everything the title band covered was her —
-  // the band cut her at the neck and left a floating head with no
-  // body and no car. At zoom 1, favouring the top of the photo, the
-  // window runs from just above her hair to her upper thighs: head,
-  // shoulders and upper chest stay ABOVE the title's top edge, and
-  // what the letters and the script cross below them is the car's
-  // zone and her belt line — the winners' pattern, where the
-  // lettering rides the car, never the person. The sky band across
-  // the panel's top still clears her hair for the review row (her
-  // hair's top lands ~0.10 down the panel, the pill ends at 0.074).
-  // Only this scene is reframed; every other shot keeps the
-  // renderer's default framing exactly.
+  // The Blockbuster Grid showcase's hero framing (round 13, set to
+  // cast-poster scale in round 44): a mid shot, not the old tight
+  // crop. At zoom 1.22 the photo's window ended at her belt, so
+  // everything the title band covered was her — the band cut her at
+  // the neck and left a floating head with no body and no car. At
+  // zoom 1, favouring the top of the photo, the window runs from
+  // just above her hair to her upper thighs: head, shoulders and
+  // upper chest stay ABOVE the title's top edge, and what the
+  // letters and the script cross below them is the car's zone and
+  // her belt line — the winners' pattern, where the lettering rides
+  // the car, never the person. The sky band across the panel's top
+  // still clears her hair for the review row (her hair's top lands
+  // ~0.10 down the panel, the pill ends at 0.074). Only this scene
+  // is reframed; every other shot keeps the renderer's default
+  // framing exactly.
+  // Round 44 pushes the window to the largest face the panel's
+  // furniture allows, on the top-3 competitor analysis' verdict
+  // that the cover loses on subject size: the established face box
+  // (the skin gate's photo box) grows from 274 px to 337 px of the
+  // panel's height — share 0.254 -> 0.312, a 1.23x growth — at zoom
+  // 1.23, shifted right and up (ox 0.40, oy 0.74). That is the
+  // measured ceiling, not a round number: the review pill's foot
+  // (~y 105) and the title's top edge (~y 458 over the only face
+  // span that also clears the seal and the slanted divider) leave
+  // a ~353 px clear band, and a 1.5x face (411 px) fits it only by
+  // putting her chin ~100 px behind the letters or her hair under
+  // the pill. At this window the lifeguard tower and both palm
+  // rows stay in frame, her chin keeps ~7 px clear of the title's
+  // top edge, the pill only kisses her topmost hair wisps, and
+  // every skin gate holds (heroine mag330 17.82 against the 18.43
+  // cap, measured like round 40). The hero is the harmonize
+  // reference, so the satellites' white-balance gains re-derive
+  // from the reframed hero mean: measured on the 1920x1080 export
+  // their pixels move by a mean of 1.4 levels (max 27, none over
+  // 32) — a uniform balance nudge, no content change.
   const heroFrame = (state.layout === 'grid' && state.grade === 'blockbuster')
-    ? { zoom: 1, oy: 0.85 }
+    ? { zoom: 1.23, ox: 0.4, oy: 0.74 }
     : undefined;
   // The Blockbuster Grid showcase's scene panels get their own
   // framings, for the same reason the hero does. The cruiser photo
