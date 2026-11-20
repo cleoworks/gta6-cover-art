@@ -78,9 +78,22 @@ export async function runShot(shot, query, helpers) {
   // in its top-right cell and the panel's chip — which hangs at that
   // cell's top-right — lands on pure dusk sky, clear of the sign.
   // Any other scene keeps the renderer's default framing exactly.
+  // Round 41 pulls the window back off the cell's slanted right
+  // edge: round 40's wider cell left the fin's tip and the rear
+  // bumper bullet within ~2-4 px of the gutter line, so the gutter
+  // stroke (13 px wide, centred on the edge) printed over the
+  // chrome and the fin read as cut by the divider. The new window
+  // (zoom 1.42, ox -0.01, oy -0.14) trades a hair of the empty
+  // street at the photo's left for a slightly larger car set
+  // further left: measured on the 1920x1080 export the fin's tip
+  // now ends ~16 px inside the edge (~10 px clear of the gutter
+  // band) and the bullet ~18 px, the car's box keeps its round-40
+  // height, and the visible car area holds at ~99.5% of round
+  // 40's — the small zoom-in pays back what the leftward shift
+  // hands to the lettering.
   const showcaseScene = state.layout === 'grid' && state.grade === 'blockbuster';
   const cruiserFrame = (showcaseScene && third.endsWith('cruiser.jpg'))
-    ? { zoom: 1.38, ox: 0.18, oy: -0.16 }
+    ? { zoom: 1.42, ox: -0.01, oy: -0.14 }
     : undefined;
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { zoom: 1.1, ox: -0.44, oy: 0.55 }
