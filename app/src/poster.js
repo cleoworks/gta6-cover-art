@@ -45,6 +45,7 @@ export const LAYOUTS = {
   duo: { panels: 2, slant: 0.055, label: 'Split Duo' },
   solo: { panels: 1, slant: 0, label: 'Solo Hero' },
   grid: { panels: 5, slant: 0, label: 'Cover Grid' },
+  cast: { panels: 4, slant: 0, label: 'Cast Cover' },
   mosaic: { panels: 9, slant: 0, label: 'Mosaic' },
 };
 
@@ -437,6 +438,7 @@ export const GRADES = {
  *  is a 3x3 grid of nine equal cells (the GTA V cover pattern). */
 export function panelShapes(w, h, layout) {
   if (layout === 'grid') return { shapes: gridShapes(w, h), slant: 0, count: 5 };
+  if (layout === 'cast') return { shapes: castShapes(w, h), slant: 0, count: 4 };
   if (layout === 'mosaic') return { shapes: mosaicShapes(w, h), slant: 0, count: 9 };
   const spec = LAYOUTS[layout] ?? LAYOUTS.trio;
   const n = spec.panels;
@@ -550,6 +552,71 @@ function gridShapes(w, h) {
   return [rect(0, 0, w, mh, true),
     rect(0, mh, cw, h - mh), rect(cw, mh, cw, h - mh),
     rect(2 * cw, mh, cw, h - mh), rect(3 * cw, mh, cw, h - mh)];
+}
+
+/** Cast (round 48): the asymmetric cast block the top of the board
+ *  wins with — one dominant hero panel, a column of stacked portraits
+ *  and a tall vehicle scene, instead of the Grid's even satellite
+ *  block where every subject read at the same small scale. Panel
+ *  order is the cast order everywhere: hero, pier portrait, marina
+ *  portrait, cruiser scene.
+ *  Landscape: the hero takes the left 44% of the frame at full
+ *  height behind the same right-leaning divider the Grid uses; the
+ *  portraits stack in a column at the right whose width (389/1920 of
+ *  the frame) and split (the marina panel keeps 54% of the height)
+ *  hold the marina cell at exactly the size its measured skin gate
+ *  was proven at in the Grid — its draw scale does not move, so the
+ *  portrait that could not grow in round 47 keeps its proven frame
+ *  while the hero grows around it; the cruiser scene fills the tall
+ *  middle between the hero's divider and the portrait column, a
+ *  full-height stage the lettering only crosses at its left flank,
+ *  so the car shows whole instead of as the strip the Grid's band
+ *  left of it. The three right-hand panels share the hero's lean, so
+ *  the four tile the canvas exactly.
+ *  Portrait: hero across the top (46% of the height), the two
+ *  portraits side by side under it, the cruiser as a wide strip
+ *  along the foot. Square: the same stack with a taller hero. */
+function castShapes(w, h) {
+  const rect = (x, y, pw, ph, main) => ({
+    x, y, w: pw, h: ph, main: !!main,
+    poly: [[x, y], [x + pw, y], [x + pw, y + ph], [x, y + ph]],
+  });
+  if (w > h) {
+    const lean = w * 0.038;
+    const hw = w * 0.44;
+    const colW = w * (389 / 1920);
+    const cw0 = w - colW;
+    const ph = h * 0.46;
+    const shape = (poly, main) => {
+      const xs = poly.map((p) => p[0]);
+      const ys = poly.map((p) => p[1]);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      return {
+        x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y,
+        main: !!main, poly,
+      };
+    };
+    const t = ph / h;
+    return [
+      shape([[0, 0], [hw, 0], [hw + lean, h], [0, h]], true),
+      shape([[cw0, 0], [w, 0], [w, ph], [cw0 + lean * t, ph]]),
+      shape([[cw0 + lean * t, ph], [w, ph], [w, h], [cw0 + lean, h]]),
+      shape([[hw, 0], [cw0, 0], [cw0 + lean, h], [hw + lean, h]]),
+    ];
+  }
+  if (w < h) {
+    const mh = h * 0.46;
+    const ch = h * 0.3;
+    return [rect(0, 0, w, mh, true),
+      rect(0, mh, w / 2, ch), rect(w / 2, mh, w / 2, ch),
+      rect(0, mh + ch, w, h - mh - ch)];
+  }
+  const mh = h * 0.5;
+  const ch = h * 0.28;
+  return [rect(0, 0, w, mh, true),
+    rect(0, mh, w / 2, ch), rect(w / 2, mh, w / 2, ch),
+    rect(0, mh + ch, w, h - mh - ch)];
 }
 
 /** Mosaic: nine equal cells in a 3x3 grid, whatever the canvas aspect —
@@ -1836,11 +1903,13 @@ const SUN_FX = {
   trio: { land: 0.685, sq: 0.58, port: 0.565 },
   duo: { land: 0.78, sq: 0.64, port: 0.6 },
   grid: { land: 0.7, sq: 0.625, port: 0.78 },
+  cast: { land: 0.7, sq: 0.68, port: 0.68 },
 };
 const SUN_R = {
   trio: { land: 0.072, sq: 0.065, port: 0.065 },
   duo: { land: 0.072, sq: 0.065, port: 0.065 },
   grid: { land: 0.052, sq: 0.05, port: 0.065 },
+  cast: { land: 0.05, sq: 0.05, port: 0.06 },
 };
 
 export function sunAnchor(state, shapes, w, h) {
@@ -1944,6 +2013,23 @@ const PANEL_CAPTIONS = [
   ['OCEAN DRIVE', '5:12 PM — TOP DOWN'],
   ['NEON DISTRICT', '11:48 PM — AFTER DARK'],
   ['MARINA DEL FARO', '8:03 PM — SMILING AT THE STORM'],
+];
+
+// Role chips for the Cast layout's four panels, in cast order — the
+// complete system, one role per panel, each name born from what its
+// photo actually shows (round 45's lesson: a half-mixed system of
+// roles and places read as half-hearted, and a role the image does
+// not support reads as pasted on). The heroine runs the boulevard
+// in sunglasses — the fixer. The pier man holds a fishing rod on his
+// own pier — the fisherman, literally. The marina girl smiles out
+// of the harbour dusk — the siren. The cruiser is the car the story
+// leaves in — the getaway. The sub-line keeps the Grid chips' own
+// form, place and hour, so the role sits on the same furniture.
+const CAST_CAPTIONS = [
+  ['THE FIXER', 'PALMERA BOULEVARD — 6:47 PM'],
+  ['THE FISHERMAN', 'HARROW PIER — 5:58 AM'],
+  ['THE SIREN', 'MARINA DEL FARO — 8:03 PM'],
+  ['THE GETAWAY', 'OCEAN DRIVE — 5:12 PM'],
 ];
 
 function rr(ctx, x, y, w, h, r) {
@@ -2051,18 +2137,23 @@ function drawSeal(ctx, cx, cy, r, rot) {
  *  (round 15 pixel scan below), so that one pill is filled solid —
  *  nothing behind it can show through its body. */
 function drawRatingRow(ctx, w, h, cy, spot = null) {
-  const starR = h * 0.0155;
+  // `spot.scale` (round 48, the Cast cruiser placement) shrinks the
+  // whole pill as one piece — stars, lettering, gaps and padding —
+  // for a panel narrower than the hero it was designed on; every
+  // existing caller leaves it unset and gets exactly 1.
+  const sc = spot && spot.scale ? spot.scale : 1;
+  const starR = h * 0.0155 * sc;
   const quote = `${REVIEW_QUOTE} — ${REVIEW_SOURCE}`;
-  ctx.font = `${Math.round(h * 0.029)}px "Bebas Neue", sans-serif`;
+  ctx.font = `${Math.round(h * 0.029 * sc)}px "Bebas Neue", sans-serif`;
   const tw = ctx.measureText(quote).width;
   const starsW = 5 * starR * 2.3;
-  const gap = h * 0.016;
-  const padX = h * 0.02;
+  const gap = h * 0.016 * sc;
+  const padX = h * 0.02 * sc;
   const totalW = starsW + gap + tw;
   const x0 = spot && spot.right != null
     ? spot.right - totalW - padX
     : (w - totalW) / 2;
-  const pillH = h * 0.058;
+  const pillH = h * 0.058 * sc;
   rr(ctx, x0 - padX, cy - pillH / 2, totalW + padX * 2, pillH, pillH / 2);
   ctx.fillStyle = spot && spot.opaque ? '#0a0414' : 'rgba(10, 4, 20, 0.62)';
   ctx.fill();
@@ -2080,21 +2171,22 @@ function drawRatingRow(ctx, w, h, cy, spot = null) {
   ctx.fillStyle = '#fff3d6';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(quote, x0 + starsW + gap, cy + h * 0.0102);
+  ctx.fillText(quote, x0 + starsW + gap, cy + h * 0.0102 * sc);
 }
 
 /** One caption chip per Grid panel, top-left inside the panel: a dark
  *  chip with a magenta spine, the place in Anton and the time-and-beat
  *  line under it in Bebas — the cover lines of the bundled scenes. */
-function drawPanelChips(ctx, shapes, w, h) {
+function drawPanelChips(ctx, shapes, w, h, layoutKey) {
+  const caps = layoutKey === 'cast' ? CAST_CAPTIONS : PANEL_CAPTIONS;
   const nameSize = Math.round(h * 0.0205);
   const subSize = Math.round(h * 0.0155);
   const padX = Math.max(8, w * 0.007);
   const padY = Math.max(5, h * 0.007);
   const barW = Math.max(3, w * 0.0024);
   const lineGap = Math.max(2, h * 0.003);
-  for (let i = 0; i < shapes.length && i < PANEL_CAPTIONS.length; i++) {
-    const [name, sub] = PANEL_CAPTIONS[i];
+  for (let i = 0; i < shapes.length && i < caps.length; i++) {
+    const [name, sub] = caps[i];
     ctx.font = `${nameSize}px Anton, "Arial Black", sans-serif`;
     const nameW = ctx.measureText(name).width;
     ctx.font = `${subSize}px "Bebas Neue", sans-serif`;
@@ -2112,14 +2204,30 @@ function drawPanelChips(ctx, shapes, w, h) {
     // portrait and square Grids flag nothing and keep the plain
     // top-left rule.
     const buried = w > h && !!shapes[i].chipLow;
-    let x = i === 3
+    // The Cast cruiser's chip (round 48): the scene panel's top is
+    // the review pill's ground and its left flank is the title's, so
+    // THE GETAWAY drops to the panel's lower right instead — the
+    // street below the car, above the banner strip, clamped inside
+    // the panel's slanted right edge like every other chip.
+    const castLow = layoutKey === 'cast' && w > h && i === 3;
+    // The Cast pier chip (round 48): the portrait column is narrow,
+    // so a top-left chip there would sit across the fisherman's hat
+    // and forehead — his panel's one crowded corner. THE FISHERMAN
+    // instead rides the panel's lower right, over the open sea
+    // beside his rod, clear of the face above and the divider below.
+    const castSea = layoutKey === 'cast' && w > h && i === 1;
+    let x = i === 3 || castSea
       ? shapes[i].x + shapes[i].w - chipW - w * 0.011
       : (buried
         ? shapes[i].x + shapes[i].w - chipW - w * 0.011
         : shapes[i].x + w * 0.011);
-    let y = buried
-      ? shapes[i].y + shapes[i].h * 0.6
-      : shapes[i].y + h * 0.013;
+    let y = castLow
+      ? h * 0.79
+      : (castSea
+        ? shapes[i].y + shapes[i].h - chipH - h * 0.013
+        : (buried
+          ? shapes[i].y + shapes[i].h * 0.6
+          : shapes[i].y + h * 0.013));
     // Round 19: the landscape Grid's panels are parallelograms now, so
     // a chip parked off the bounding box can hang over a slanted edge
     // onto the neighbouring panel (the marina cell's top-left corner
@@ -2135,7 +2243,7 @@ function drawPanelChips(ctx, shapes, w, h) {
     const spanR = polySpanAtX(shapes[i].poly, x + chipW);
     if (spanL) y = Math.max(y, spanL.top + mY);
     if (spanR) y = Math.max(y, spanR.top + mY);
-    if (i === 3 || buried) {
+    if (i === 3 || buried || castSea) {
       const spanT = polySpanAtY(shapes[i].poly, y);
       const spanB = polySpanAtY(shapes[i].poly, y + chipH);
       if (spanT) x = Math.min(x, spanT.right - chipW - mX);
@@ -2257,8 +2365,12 @@ function drawBannerStrip(ctx, w, h, state) {
   // letterspaced capitals, fitted to the space BETWEEN the chip and
   // the barcode and centred in that span — on a narrow canvas the
   // height-scaled chip and barcode would otherwise eat the line's
-  // first and last letters.
-  const line = BANNER_LINE;
+  // first and last letters. The Cast cover counts its own panels:
+  // four stories, not five — the copy stays true to the cover it
+  // rides on.
+  const line = state.layout === 'cast'
+    ? 'ONE COAST — FOUR STORIES — NO WAY BACK'
+    : BANNER_LINE;
   const midL = estX + estW + w * 0.02;
   const midR = bcX - w * 0.02;
   let size = Math.round(sh * 0.54);
@@ -2297,7 +2409,21 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
     drawSeal(ctx, w * 0.94, h * 0.055, minSide * 0.05, 0.18);
     return;
   }
-  if (state.layout === 'grid') {
+  if (state.layout === 'cast') {
+    drawPanelChips(ctx, shapes, w, h, 'cast');
+    if (w > h) {
+      // Landscape Cast: the hero's sky belongs to her face now, so
+      // the seal and the review pill move to the cruiser scene's
+      // sky and street — the one panel with no face to protect. The
+      // seal rides the upper street at the panel's left-of-centre;
+      // the pill (scaled to the panel's narrower span, opaque like
+      // the Grid hero's) right-aligns to the panel's own slanted
+      // right edge at its top, clear of the seal below it.
+      drawSeal(ctx, shapes[3].x + shapes[3].w * 0.3, h * 0.16, minSide * 0.064, -0.2);
+    } else {
+      drawSeal(ctx, w * 0.5, shapes[1].y, minSide * 0.085, -0.2);
+    }
+  } else if (state.layout === 'grid') {
     drawPanelChips(ctx, shapes, w, h);
     // Landscape Grid: the seal rides the HERO panel's sky — measured,
     // not assumed. Round 13 put it on the causeway panel on the claim
@@ -2354,6 +2480,13 @@ function drawDressing(ctx, w, h, state, shapes, titleBox) {
       // the fisherman's corner.
       const heroSpan = polySpanAtY(shapes[0].poly, h * 0.045);
       drawRatingRow(ctx, w, h, h * 0.045, { right: (heroSpan ? heroSpan.right : shapes[0].x + shapes[0].w) - w * 0.018, opaque: true });
+    } else if (state.layout === 'cast' && w > h) {
+      // The Cast pill (see the seal note above): right-aligned to
+      // the cruiser panel's slanted right edge at the pill's height,
+      // scaled to fit inside the panel's span at that height, opaque
+      // because the street behind it is busy print.
+      const sceneSpan = polySpanAtY(shapes[3].poly, h * 0.045);
+      drawRatingRow(ctx, w, h, h * 0.045, { right: (sceneSpan ? sceneSpan.right : shapes[3].x + shapes[3].w) - w * 0.018, opaque: true, scale: 0.82 });
     } else {
       const cy = titleBox
         ? titleBox.baseline - titleBox.size - h * 0.042
@@ -2706,7 +2839,7 @@ export function drawPoster(canvas, state) {
       // pill). The stack also rides higher than the undressed one,
       // because the banner strip below it is a full design band now,
       // not a footnote strip.
-      const bandTitle = dressed && state.layout === 'grid' && w > h;
+      const bandTitle = dressed && (state.layout === 'grid' || state.layout === 'cast') && w > h;
       const heroCx = (!bandTitle && dressed && state.layout === 'grid' && w > h)
         ? shapes[0].x + shapes[0].w / 2
         : null;

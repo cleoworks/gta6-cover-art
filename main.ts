@@ -8,8 +8,11 @@
 // make.fun library (vendor/makefun-app.ts, unchanged).
 //
 // The app itself: pick a photo per panel, crop it by dragging, pick a layout
-// (Vice Trio / Split Duo / Solo Hero / Cover Grid / Mosaic — Mosaic's
-// lettering sits in a title band below its nine panels), a colour grade
+// (Vice Trio / Split Duo / Solo Hero / Cover Grid / Cast Cover / Mosaic —
+// Mosaic's lettering sits in a title band below its nine panels; Cast Cover
+// is the asymmetric showcase: one dominant hero panel at poster scale, two
+// stacked portraits and a full-height scene panel, every panel carrying
+// its cast-role caption chip), a colour grade
 // (Sunset, Neon Nights, Palm Gold, Noir, Poster Ink — all gradient-mapped,
 // Poster Ink with a highlight-masked halftone, Noir with an ordered Bayer
 // dither through its posterize — Blockbuster, the photographic class: a

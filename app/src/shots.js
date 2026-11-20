@@ -75,6 +75,22 @@ export async function runShot(shot, query, helpers) {
   const heroFrame = (state.layout === 'grid' && state.grade === 'blockbuster')
     ? { zoom: 1.23, ox: 0.4, oy: 0.74 }
     : undefined;
+  // The Cast showcase's hero framing (round 48): the Cast hero panel
+  // is narrower than the Grid's (44% of the frame against 51.5%) but
+  // the face it carries is far larger — the panel itself does the
+  // growing the Grid's zoom could not. At zoom 2.05 the established
+  // face box stands ~486 px tall, ~45% of the panel's height against
+  // the Grid's 31%, with its chin on the title band's top edge and
+  // its hair just under the frame's top; the window shows her head,
+  // shoulders and upper chest above the letters and the car's zone
+  // below them, the winners' pattern the Grid scene already follows.
+  // The portrait Cast hero (1080x1350) is width-driven instead: at
+  // zoom 1.05 her face already stands ~47% of its shorter panel.
+  const castHeroFrame = (state.layout === 'cast' && state.grade === 'blockbuster')
+    ? (state.size === '1080x1350'
+      ? { zoom: 1.05, ox: 0.35, oy: 0.78 }
+      : { zoom: 2.05, ox: -0.35, oy: 0.6 })
+    : undefined;
   // The Blockbuster Grid showcase's scene panels get their own
   // framings, for the same reason the hero does. The cruiser photo
   // (round 34: the 1960 Impala convertible street scene restored
@@ -134,6 +150,29 @@ export async function runShot(shot, query, helpers) {
   const cruiserFrame = (showcaseScene && third.endsWith('cruiser.jpg'))
     ? { zoom: 1.65, ox: -0.24, oy: -0.16 }
     : undefined;
+  // The Cast cruiser framing (round 48): the scene panel is tall and
+  // full-height, and the window (zoom 1.28) is raised so the whole
+  // car — nose to fin — rides in the strip ABOVE the title band,
+  // the mirror of the Grid cell's trick of holding the car in the
+  // strip below the letters: the car's established box stands at
+  // canvas y ~255-565 with the seal just above its roofline, and
+  // the visible car area measures ~134k px, about twice what the
+  // Grid cell showed from behind the lettering (~68k). The street
+  // and the title fill the panel below the car. The portrait strip
+  // centres a gentler window on the car instead.
+  const cruiserCastFrame = (state.layout === 'cast' && state.grade === 'blockbuster' && third.endsWith('cruiser.jpg'))
+    ? (state.size === '1080x1350'
+      ? { zoom: 1.15, ox: 0.74, oy: -0.03 }
+      : { zoom: 1.28, ox: 0.44, oy: -0.78 })
+    : undefined;
+  // The Cast pier framing (round 48): the portrait column is
+  // narrower than the Grid's pier cell, so the window zooms to 1.25
+  // to hold the fisherman's face at the size the Grid showed it —
+  // the draw scale lands where the Grid's own cell put it, and the
+  // whole man stays in frame: hat, face, torso, rod hand, railing.
+  const pierCastFrame = (state.layout === 'cast' && state.grade === 'blockbuster' && second.endsWith('pier.jpg'))
+    ? { zoom: 1.25, ox: 0, oy: 0.55 }
+    : undefined;
   const neonFrame = (showcaseScene && fourth.endsWith('neon.jpg'))
     ? { zoom: 1.1, ox: -0.44, oy: 0.55 }
     : undefined;
@@ -163,12 +202,21 @@ export async function runShot(shot, query, helpers) {
   const pierDuoFrame = (state.layout === 'duo' && state.grade === 'blockbuster' && second.endsWith('pier.jpg'))
     ? { zoom: 0.87, ox: 0, oy: 1 }
     : undefined;
-  put(0, first, imgA, heroFrame);
-  put(1, second, imgB, pierDuoFrame);
+  put(0, first, imgA, heroFrame ?? castHeroFrame);
+  put(1, second, imgB, pierDuoFrame ?? pierCastFrame);
   put(2, third, imgC, cruiserFrame);
   put(3, fourth, imgD, neonFrame);
   put(4, fifth, imgE);
   put(5, sixth, imgF);
+  // The Cast layout's panel order is its own — hero, pier portrait,
+  // marina portrait, cruiser scene: the marina takes panel 2 (at the
+  // renderer's default framing exactly; its Cast cell is built to
+  // the size that frame was proven at in the Grid) and the cruiser
+  // takes panel 3 at its Cast frame above.
+  if (state.layout === 'cast') {
+    put(2, fifth, imgE);
+    put(3, third, imgC, cruiserCastFrame);
+  }
   // Mosaic's last row: second showings of the first three photos, sharing
   // their Image objects so the renderer mirrors them like the editor does.
   put(6, first, imgA);
