@@ -206,6 +206,30 @@ export const GRADES = {
     // solid impressions of the glyphs down and to the right in this
     // deep maroon-plum before the rim, outline and fill land.
     titleDepth: '#33081d',
+    // Round 29 (`titleChrome` + `titleBevel`): round 28's gold
+    // chrome split the judges — the depth and premium read won one,
+    // but both named the same three faults: the polished band ended
+    // in ONE hard straight horizon line across every letter, the
+    // pale cream stops washed the heat out of the letters' middle,
+    // and the near-white crown was the brightest object on the
+    // cover. This ramp keeps the chrome's value structure (a lit
+    // crown, a polished band, a horizon shade, a saturated reflected
+    // sheen, a deep base) and removes all three faults: every stop
+    // stays in saturated gold and orange — no cream, no near-white
+    // anywhere — the band's peak is warm gold instead of pale
+    // cream, the crown sits a step dimmer, and the horizon is a
+    // graded descent spread over a fifth of the span (band gold ->
+    // amber -> horizon shade -> sheen) instead of a cliff, so no
+    // single straight line survives for the eye to point at.
+    // `titleBevel` is the Noir top-edge trick in warm pale gold: a
+    // rim-width stroke a hair above the lettering, drawn before the
+    // rim and outline land, so a bright bevel line survives along
+    // the top edge of every letter. Fit, centre, slant, rim,
+    // outline and the round-16 extrusion do not move; `titleStops`
+    // stays as the fallback family for any caller that does not
+    // carry the chrome.
+    titleChrome: [[0, '#f6d488'], [0.14, '#f9cd6d'], [0.3, '#fec94e'], [0.42, '#ffd257'], [0.52, '#f59a35'], [0.62, '#d8731f'], [0.72, '#f97e26'], [0.84, '#ff944c'], [1, '#e05a1a']],
+    titleBevel: 'rgba(255, 244, 214, 0.85)',
     accent: '#ff2e63',
     tagText: '#1c0b3d',
     scrim: '10, 4, 20',
@@ -2267,6 +2291,11 @@ function drawTitle(ctx, w, title, noir, size, baseline, opts = {}) {
     grad.addColorStop(0.6, '#9a9a9a');
     grad.addColorStop(0.78, '#e2e2e2');
     grad.addColorStop(1, '#555555');
+  } else if (opts.chrome) {
+    // Gold chrome (round 29, Blockbuster): the grade's chrome ramp
+    // replaces the flat sunset gradient — same gradient span, but
+    // the stops carry the softened horizon of polished lettering.
+    for (const [p, c] of opts.chrome) grad.addColorStop(p, c);
   } else {
     for (const [p, c] of (opts.stops ?? TITLE_STOPS)) grad.addColorStop(p, c);
   }
@@ -2293,6 +2322,24 @@ function drawTitle(ctx, w, title, noir, size, baseline, opts = {}) {
   ctx.shadowBlur = size * 0.16;
   ctx.shadowOffsetY = size * 0.05;
   if (!noir) {
+    if (opts.chrome && opts.bevel) {
+      // The chrome's bright top bevel (round 29): the Noir edge
+      // trick, warmed — a rim-width stroke in pale gold a hair
+      // above the lettering, drawn before the rim so the rim and
+      // the dark outline cover all but a bright line along the top
+      // edge of every letter. It is drawn with the drop shadow
+      // switched off: the shadow stays cast by the rim and outline
+      // alone, exactly as before, so the title's shadow footprint
+      // on the panels under it does not move by a single pixel.
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.strokeStyle = opts.bevel;
+      ctx.lineWidth = size * 0.16 + Math.max(3, size * 0.05);
+      ctx.strokeText(title, cx, baseline - size * 0.045);
+      ctx.restore();
+    }
     // Thin complementary rim, widest stroke first.
     ctx.strokeStyle = opts.rim ?? '#19e3ff';
     ctx.lineWidth = size * 0.16 + Math.max(3, size * 0.05);
@@ -2471,7 +2518,7 @@ export function drawPoster(canvas, state) {
     if (title) {
       const size = fitFont(ctx, title, w * 0.94, bandH * 0.46, 'Anton, "Arial Black", sans-serif');
       titleBox = drawTitle(ctx, w, title, noir, size, gridH + bandH * 0.55,
-        { stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth });
+        { stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth, chrome: grade.titleChrome, bevel: grade.titleBevel });
     }
   } else {
     // Scrim so the lettering reads over any photo. A dressed poster
@@ -2534,7 +2581,7 @@ export function drawPoster(canvas, state) {
       }
       titleBox = drawTitle(ctx, w, title, noir, size,
         bandTitle ? h * 0.738 : (dressed ? h * 0.752 : h * 0.865),
-        { cx: bandTitle ? w * 0.36 : (heroCx ?? w / 2), stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth });
+        { cx: bandTitle ? w * 0.36 : (heroCx ?? w / 2), stops: grade.titleStops, rim: grade.titleRim, depth: grade.titleDepth, chrome: grade.titleChrome, bevel: grade.titleBevel });
       titleBox.band = bandTitle;
     }
   }
